@@ -1,0 +1,34 @@
+[project]
+name = "rag-agent"
+version = "0.1.0"
+description = "A simple device Q&A agent powered by LangChain and Hugging Face"
+readme = "README.md"
+authors = [
+    { name = "雷家兴", email = "leij49456@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=4.4.1",
+    "faiss-cpu>=1.13.0",
+    "langchain>=1.1.0",
+    "langchain-community>=0.4.1",
+    "langchain-huggingface>=1.1.0",
+    "langchain-openai>=1.1.0",
+    "prompt-toolkit>=3.0.52",
+    "python-dotenv>=1.2.1",
+    "rich>=14.2.0",
+    "sentence-transformers>=5.1.2",
+]
+
+[project.scripts]
+rag-agent = "rag_agent:main"
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.407",
+    "ruff>=0.14.7",
+]
