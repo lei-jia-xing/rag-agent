@@ -14,9 +14,7 @@ class DatasetLoader:
     从 Hugging Face 加载数据集并转换为统一的文档格式。
     """
 
-    def __init__(
-        self, dataset_name: str, split: str = "train", sample_size: int = 100, load_all: bool = False
-    ) -> None:
+    def __init__(self, dataset_name: str, split: str = "train", sample_size: int = 100, load_all: bool = False) -> None:
         """
         初始化数据加载器
 

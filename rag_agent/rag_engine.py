@@ -69,8 +69,7 @@ class RAGEngine:
             # 仅加载模式下，向量库不存在则报错
             if load_only:
                 raise ValueError(
-                    f"向量数据库不存在: {vectorstore_path}\n"
-                    "请先运行 'uv run rag-agent build' 构建向量数据库"
+                    f"向量数据库不存在: {vectorstore_path}\n请先运行 'uv run rag-agent build' 构建向量数据库"
                 )
 
             # 需要文档来构建向量库
@@ -160,9 +159,7 @@ class RAGEngine:
             chunk_overlap=config.CHUNK_OVERLAP,
         )
 
-        langchain_docs = [
-            Document(page_content=doc["content"], metadata=doc.get("metadata", {})) for doc in documents
-        ]
+        langchain_docs = [Document(page_content=doc["content"], metadata=doc.get("metadata", {})) for doc in documents]
         split_docs = text_splitter.split_documents(langchain_docs)
         console.print(f"[green]文档已分割为 {len(split_docs)} 个块[/green]")
 

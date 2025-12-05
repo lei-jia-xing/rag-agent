@@ -3,7 +3,7 @@
 使用 Typer 构建的专业命令行界面。
 """
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 import pyfiglet
 import typer
@@ -42,7 +42,7 @@ SLASH_COMMANDS: dict[str, tuple[str, str]] = {
 
 class SlashCommandCompleter(Completer):
     """斜杠命令补全器
-    
+
     类似 Claude Code 的 / 命令补全。
     只在输入 / 开头时触发，显示可用命令和描述。
     """
@@ -134,7 +134,7 @@ class InteractiveSession:
             config.validate()
         except ValueError as e:
             console.print(f"[red]配置错误: {e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         if not self._init_app():
             raise typer.Exit(1)
@@ -187,7 +187,7 @@ class InteractiveSession:
 
 @app.command()
 def qa(
-    query: Annotated[Optional[str], typer.Argument(help="问题（留空进入交互模式）")] = None,
+    query: Annotated[str | None, typer.Argument(help="问题（留空进入交互模式）")] = None,
 ) -> None:
     """问答模式 - 基于知识库的智能问答"""
     if query:
@@ -205,7 +205,7 @@ def qa(
 
 @app.command()
 def report(
-    topic: Annotated[Optional[str], typer.Argument(help="报告主题（留空进入交互模式）")] = None,
+    topic: Annotated[str | None, typer.Argument(help="报告主题（留空进入交互模式）")] = None,
 ) -> None:
     """报告模式 - 自动生成技术报告"""
     if topic:
@@ -239,7 +239,7 @@ def build(
         console.print("[dim]运行 'rag-agent qa' 开始使用[/dim]")
     except Exception as e:
         console.print(f"[red]✗ 构建失败: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.callback(invoke_without_command=True)
