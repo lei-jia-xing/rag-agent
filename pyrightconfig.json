@@ -1,8 +1,11 @@
 {
-  "include": ["src"],
+  "include": ["."],
   "exclude": [
     "**/__pycache__",
     "**/.venv",
+    ".venv",
+    ".git",
+    "**/*.pyc",
     "**/node_modules"
   ],
   "venvPath": ".",

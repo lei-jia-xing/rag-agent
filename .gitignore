@@ -26,3 +26,9 @@ wheels/
 
 # FAISS index
 *.faiss
+
+# Vector store cache
+.vectorstore/
+.cache/
+
+.rag_history

@@ -9,20 +9,27 @@ console = Console()
 
 
 class DatasetLoader:
-    """数据集加载器"""
+    """数据集加载器
 
-    def __init__(self, dataset_name: str, split: str = "train", sample_size: int = 100):
+    从 Hugging Face 加载数据集并转换为统一的文档格式。
+    """
+
+    def __init__(
+        self, dataset_name: str, split: str = "train", sample_size: int = 100, load_all: bool = False
+    ) -> None:
         """
         初始化数据加载器
 
         Args:
             dataset_name: Hugging Face 数据集名称
             split: 数据集分割（train/validation/test）
-            sample_size: 采样数量
+            sample_size: 采样数量（load_all=False 时生效）
+            load_all: 是否加载全量数据集（用于预构建向量库）
         """
         self.dataset_name = dataset_name
         self.split = split
         self.sample_size = sample_size
+        self.load_all = load_all
         self.dataset: Dataset | None = None
 
     def load(self) -> list[dict[str, Any]]:
@@ -30,7 +37,11 @@ class DatasetLoader:
         加载数据集
 
         Returns:
-            文档列表，每个文档包含 content 字段
+            文档列表，每个文档包含 content 字段和可选的 metadata
+
+        Raises:
+            TypeError: 当加载的数据集类型不正确时
+            Exception: 当数据集加载失败时
         """
         console.print(f"[cyan]正在加载数据集: {self.dataset_name}...[/cyan]")
 
@@ -44,11 +55,12 @@ class DatasetLoader:
 
             self.dataset = dataset_raw
 
-            # 采样
-            if len(self.dataset) > self.sample_size:
+            # 采样（仅在非全量模式下）
+            if not self.load_all and len(self.dataset) > self.sample_size:
                 self.dataset = self.dataset.shuffle(seed=42).select(range(self.sample_size))
-
-            console.print(f"[green]成功加载 {len(self.dataset)} 条数据[/green]")
+                console.print(f"[green]成功加载 {len(self.dataset)} 条数据（采样）[/green]")
+            else:
+                console.print(f"[green]成功加载 {len(self.dataset)} 条数据（全量）[/green]")
 
             # 转换为文档格式
             documents = self._convert_to_documents()
