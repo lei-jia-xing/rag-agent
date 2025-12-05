@@ -1,6 +1,6 @@
 [project]
 name = "rag-agent"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A simple device Q&A agent powered by LangChain and Hugging Face"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -26,6 +26,9 @@ rag-agent = "rag_agent:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "rag_agent/__init__.py"
 
 [tool.uv]
 package = true

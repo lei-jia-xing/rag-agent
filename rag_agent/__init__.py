@@ -1,5 +1,7 @@
 """RAG Agent - 设备问答智能体"""
 
+__version__ = "0.1.0"
+
 from rag_agent.cli import app
 
 
