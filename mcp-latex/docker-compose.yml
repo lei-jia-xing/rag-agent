@@ -1,0 +1,48 @@
+services:
+  mcp-latex-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-latex-server
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    
+    # Note: MCP servers use stdio, not HTTP, so port mapping isn't used
+    # The port is just for reference
+    # ports:
+    #   - "8000:8000"
+    
+    environment:
+      - MCP_PROJECT_ROOT=/workspace
+      - PYTHONPATH=/workspace
+      - DOCUMENT_OUTPUT_DIR=documents
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    
+    volumes:
+      # Output directories
+      - ./documents:/workspace/documents
+      - ./logs:/workspace/logs
+      
+      # Cache directories for faster LaTeX compilation
+      - latex-cache:/home/mcp/.cache/latex
+      - texmf-cache:/home/mcp/.texmf-var
+    
+    healthcheck:
+      test: ["CMD", "sh", "-c", "python3 -c 'import mcp; print(\"OK\")' && pdflatex --version > /dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  latex-cache:
+    driver: local
+  texmf-cache:
+    driver: local
