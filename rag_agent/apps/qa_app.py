@@ -19,10 +19,10 @@ class QAApp(BaseApp):
     问答应用
     """
 
-    def __init__(self) -> None:
+    def __init__(self, engine: RAGEngine | None = None) -> None:
         """初始化问答应用"""
         super().__init__()
-        self.engine = RAGEngine()
+        self.engine = engine if engine is not None else RAGEngine()
         self._config = AppConfig(
             name="qa",
             description="设备知识问答 - 基于电气工程知识库的智能问答",

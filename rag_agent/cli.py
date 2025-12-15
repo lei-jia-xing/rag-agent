@@ -3,6 +3,7 @@
 使用 Typer 构建的专业命令行界面。
 """
 
+from pathlib import Path
 from typing import Annotated
 
 import pyfiglet
@@ -18,6 +19,7 @@ from rag_agent.apps import QAApp, ReportApp
 from rag_agent.apps.base import BaseApp
 from rag_agent.config import config
 from rag_agent.data_loader import DatasetLoader
+from rag_agent.pdf_generator import generate_report_pdf
 from rag_agent.rag_engine import RAGEngine
 
 # Typer 应用
@@ -34,6 +36,7 @@ console = Console()
 SLASH_COMMANDS: dict[str, tuple[str, str]] = {
     "/qa": ("切换问答模式", "switch"),
     "/report": ("切换报告模式", "switch"),
+    "/pdf": ("生成PDF报告", "action"),
     "/clear": ("清屏", "action"),
     "/help": ("显示帮助", "action"),
     "/exit": ("退出", "action"),
@@ -77,13 +80,17 @@ class InteractiveSession:
 
     def __init__(self, mode: str = "qa") -> None:
         self.mode = mode
-        self.app: BaseApp = QAApp() if mode == "qa" else ReportApp()
+        # 共享的 RAG 引擎，避免重复加载
+        self.shared_engine = RAGEngine()
+        self.app: BaseApp = QAApp(self.shared_engine) if mode == "qa" else ReportApp(self.shared_engine)
         self.session: PromptSession[str] = PromptSession(
             history=FileHistory(".rag_history"),
             completer=SlashCommandCompleter(),
             complete_while_typing=True,
         )
         self._interrupt_count = 0  # 连续中断计数
+        self._last_result = ""  # 最后一次的结果，用于PDF生成
+        self._engine_initialized = False  # 引擎是否已初始化
 
     def get_prompt(self) -> str:
         """生成提示符"""
@@ -98,15 +105,24 @@ class InteractiveSession:
             return
 
         self.mode = mode
-        self.app = QAApp() if mode == "qa" else ReportApp()
+        # 复用共享的 RAG 引擎，避免重新加载
+        self.app = QAApp(self.shared_engine) if mode == "qa" else ReportApp(self.shared_engine)
         console.print(f"[green]✓ 切换到 {'问答' if mode == 'qa' else '报告'} 模式[/green]")
-        self._init_app()
+
+        # 如果引擎还未初始化，则初始化
+        if not self._engine_initialized:
+            self._init_app()
+        else:
+            # 如果引擎已初始化，只需要初始化应用状态
+            self.app._initialized = True  # 复用引擎的初始化状态
+            console.print(f"[green]✓ {'问答' if mode == 'qa' else '报告'} 应用就绪[/green]")
 
     def _init_app(self) -> bool:
         """初始化应用"""
         try:
             with console.status("[dim]加载中...[/dim]"):
                 self.app.initialize()
+            self._engine_initialized = True  # 标记引擎已初始化
             console.print("[green]✓ 就绪[/green]")
             return True
         except Exception as e:
@@ -119,12 +135,96 @@ class InteractiveSession:
             with console.status("[cyan]思考中...[/cyan]", spinner="dots"):
                 result = self.app.run(query)
 
+            # 存储最后一次结果（用于PDF生成）
+            self._last_result = result
+
             if self.mode == "qa":
                 console.print(Panel(result, border_style="cyan", padding=(0, 1)))
             else:
                 console.print(Panel(Markdown(result), border_style="green", padding=(0, 1)))
         except Exception as e:
             console.print(f"[red]错误: {e}[/red]")
+
+    def generate_pdf_report(self, topic: str | None = None) -> None:
+        """直接生成PDF报告"""
+        if topic is None:
+            console.print("[yellow]请指定报告主题: /pdf <主题>[/yellow]")
+            return
+
+        try:
+            # 确保在报告模式或可以切换到报告模式
+            if self.mode != "report":
+                self.original_mode = self.mode  # 保存原始模式
+                console.print(f"[dim]切换到报告模式生成PDF...[/dim]")
+                self.switch_mode("report")
+
+            with console.status("[cyan]正在生成报告内容...[/cyan]", spinner="dots"):
+                # 生成报告内容
+                report_content = self.app.run(topic)
+
+                # 也存储为最后结果
+                self._last_result = report_content
+
+            with console.status("[cyan]正在生成PDF...[/cyan]", spinner="dots"):
+                # 生成PDF文件名
+                from datetime import datetime
+                import re
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                safe_topic = re.sub(r"[^\w\s-]", "", topic)[:20].strip()
+                safe_topic = re.sub(r"[-\s]+", "_", safe_topic)
+                output_path = Path(f"report_{safe_topic}_{timestamp}.pdf")
+
+                # 生成PDF
+                pdf_path = generate_report_pdf(
+                    content=report_content,
+                    output_path=output_path,
+                    title=f"技术报告: {topic}",
+                )
+
+            console.print(f"[green]✓ PDF已生成: {pdf_path}[/green]")
+
+            # 如果切换了模式，询问是否切换回去
+            if hasattr(self, 'original_mode') and self.original_mode != "report":
+                console.print(f"[dim]提示：您仍在报告模式，使用 /{self.original_mode} 可切换回去[/dim]")
+
+        except Exception as e:
+            console.print(f"[red]PDF生成失败: {e}[/red]")
+
+    def generate_pdf_from_last_result(self, topic: str | None = None) -> None:
+        """从最后一次结果生成PDF（保留原功能）"""
+        # 如果提供了topic参数，应该重新生成报告而不是使用缓存
+        if topic is not None:
+            console.print("[yellow]检测到主题参数，正在生成新的报告...[/yellow]")
+            self.generate_pdf_report(topic)
+            return
+
+        if not hasattr(self, '_last_result') or not self._last_result:
+            # 如果没有上次结果，提示用户指定主题
+            console.print("[yellow]没有上次的查询结果，请使用 /pdf <主题> 来生成新的PDF报告[/yellow]")
+            return
+
+        # 没有topic参数时，使用_last_result生成PDF
+        try:
+            with console.status("[cyan]正在生成PDF...[/cyan]", spinner="dots"):
+                # 生成PDF文件名
+                from datetime import datetime
+                import re
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                safe_topic = "cached_result"  # 标记这是缓存的结果
+                output_path = Path(f"report_{safe_topic}_{timestamp}.pdf")
+
+                # 生成PDF
+                pdf_path = generate_report_pdf(
+                    content=self._last_result,
+                    output_path=output_path,
+                    title=f"技术报告: {topic}",
+                )
+
+            console.print(f"[green]✓ PDF已生成: {pdf_path}[/green]")
+        except Exception as e:
+            console.print(f"[red]PDF生成失败: {e}[/red]")
 
     def run(self) -> None:
         """主循环"""
@@ -162,8 +262,14 @@ class InteractiveSession:
                     console.print("\n[bold]命令:[/bold]")
                     console.print("  [cyan]/qa[/cyan]      切换问答模式")
                     console.print("  [cyan]/report[/cyan]  切换报告模式")
+                    console.print("  [cyan]/pdf[/cyan]      生成PDF报告 [/pdf <主题>]")
                     console.print("  [cyan]/clear[/cyan]   清屏")
                     console.print("  [cyan]/exit[/cyan]    退出\n")
+                elif user_input.startswith("/pdf"):
+                    # 解析命令参数：/pdf [topic]
+                    parts = user_input.split(maxsplit=1)
+                    topic = parts[1] if len(parts) > 1 else None
+                    self.generate_pdf_from_last_result(topic)
                 elif user_input.startswith("/"):
                     console.print(f"[yellow]未知命令: {cmd}[/yellow]")
                 else:
@@ -192,7 +298,7 @@ def qa(
     """问答模式 - 基于知识库的智能问答"""
     if query:
         display_banner()
-        qa_app = QAApp()
+        qa_app = QAApp()  # 单次命令使用独立实例
         with console.status("[dim]初始化...[/dim]"):
             qa_app.initialize()
         with console.status("[cyan]思考中...[/cyan]"):
@@ -206,16 +312,26 @@ def qa(
 @app.command()
 def report(
     topic: Annotated[str | None, typer.Argument(help="报告主题（留空进入交互模式）")] = None,
+    output_format: Annotated[str, typer.Option("--format", "-f", help="输出格式: markdown 或 pdf")] = "markdown",
+    output_path: Annotated[str | None, typer.Option("--output", "-o", help="输出文件路径（PDF 格式时使用）")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="显示详细信息")] = False,
 ) -> None:
     """报告模式 - 自动生成技术报告"""
     if topic:
         display_banner()
-        report_app = ReportApp()
+        report_app = ReportApp()  # 单次命令使用独立实例
         with console.status("[dim]初始化...[/dim]"):
             report_app.initialize()
+
         with console.status("[cyan]生成报告...[/cyan]"):
-            result = report_app.run(topic)
-        console.print(Panel(Markdown(result), border_style="green", padding=(0, 1)))
+            result = report_app.run(topic, output_format=output_format, output_path=output_path, verbose=verbose)
+
+        if output_format.lower() == "pdf" and result.endswith(".pdf"):
+            console.print(
+                Panel(f"PDF 报告已生成:\n[result_path]{result}[/result_path]", border_style="green", padding=(0, 1))
+            )
+        else:
+            console.print(Panel(Markdown(result), border_style="green", padding=(0, 1)))
     else:
         session = InteractiveSession(mode="report")
         session.run()
@@ -226,7 +342,7 @@ def build(
     force: Annotated[bool, typer.Option("--force", "-f", help="强制重新构建")] = False,
 ) -> None:
     """🔨 构建向量数据库（首次使用需要）"""
-    console.print("[bold cyan]🔨 构建向量数据库[/bold cyan]\n")
+    console.print("[bold cyan]构建向量数据库[/bold cyan]\n")
 
     try:
         loader = DatasetLoader(config.DATASET_NAME, load_all=True)

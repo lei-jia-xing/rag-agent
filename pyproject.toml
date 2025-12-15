@@ -12,12 +12,15 @@ dependencies = [
     "langchain-huggingface>=1.1.0",
     "langchain-openai>=1.1.0",
     "langchain-text-splitters>=1.0.0",
+    "markdown>=3.6.0",
     "prompt-toolkit>=3.0.52",
     "pyfiglet>=1.0.4",
     "python-dotenv>=1.2.1",
+    "reportlab>=4.4.6",
     "rich>=14.2.0",
     "sentence-transformers>=5.1.2",
     "typer>=0.20.0",
+    "weasyprint>=61.2.0",
 ]
 
 [project.scripts]
