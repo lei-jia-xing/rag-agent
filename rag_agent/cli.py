@@ -19,7 +19,6 @@ from rag_agent.apps import QAApp, ReportApp
 from rag_agent.apps.base import BaseApp
 from rag_agent.config import config
 from rag_agent.data_loader import DatasetLoader
-from rag_agent.mcp.latex_client import compile_latex
 from rag_agent.pdf_generator import generate_report_pdf
 from rag_agent.rag_engine import RAGEngine
 
@@ -156,12 +155,12 @@ class InteractiveSession:
             # 确保在报告模式或可以切换到报告模式
             if self.mode != "report":
                 self.original_mode = self.mode  # 保存原始模式
-                console.print(f"[dim]切换到报告模式生成PDF...[/dim]")
+                console.print("[dim]切换到报告模式生成PDF...[/dim]")
                 self.switch_mode("report")
 
             # 生成PDF文件名
-            from datetime import datetime
             import re
+            from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_topic = re.sub(r"[^\w\s-]", "", topic)[:20].strip()

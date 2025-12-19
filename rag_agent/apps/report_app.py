@@ -158,10 +158,10 @@ class ReportApp(BaseApp):
         Returns:
             生成的 PDF 文件路径或 LaTeX 内容（如果编译失败）
         """
-        from datetime import datetime
         import re
-        from pathlib import Path
         import time
+        from datetime import datetime
+        from pathlib import Path
 
         try:
             # Stage 2: 生成 LaTeX 内容
@@ -191,7 +191,7 @@ class ReportApp(BaseApp):
 
 \end{document}"""
             else:
-                with open(template_path, "r", encoding="utf-8") as f:
+                with open(template_path, encoding="utf-8") as f:
                     template = f.read()
 
             # 替换占位符
