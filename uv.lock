@@ -1237,6 +1237,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/61/0d/5cf14e177c8ae655a2fd9324a6ef657ca4cafd3fc2201c87716055e29641/mcp-1.24.0-py3-none-any.whl", hash = "sha256:db130e103cc50ddc3dffc928382f33ba3eaef0b711f7a87c05e7ded65b1ca062", size = 232896, upload-time = "2025-12-12T14:19:36.14Z" },
 ]
 
+[package.optional-dependencies]
+cli = [
+    { name = "python-dotenv" },
+    { name = "typer" },
+]
+
 [[package]]
 name = "mdurl"
 version = "0.1.2"
@@ -2254,7 +2260,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langchain-text-splitters" },
     { name = "markdown" },
-    { name = "mcp" },
+    { name = "mcp", extra = ["cli"] },
     { name = "prompt-toolkit" },
     { name = "pyfiglet" },
     { name = "python-dotenv" },
@@ -2281,7 +2287,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.1.0" },
     { name = "langchain-text-splitters", specifier = ">=1.0.0" },
     { name = "markdown", specifier = ">=3.6.0" },
-    { name = "mcp", specifier = ">=1.24.0" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.24.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.52" },
     { name = "pyfiglet", specifier = ">=1.0.4" },
     { name = "python-dotenv", specifier = ">=1.2.1" },

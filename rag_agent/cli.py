@@ -19,6 +19,7 @@ from rag_agent.apps import QAApp, ReportApp
 from rag_agent.apps.base import BaseApp
 from rag_agent.config import config
 from rag_agent.data_loader import DatasetLoader
+from rag_agent.mcp.latex_client import compile_latex
 from rag_agent.pdf_generator import generate_report_pdf
 from rag_agent.rag_engine import RAGEngine
 
@@ -158,14 +159,7 @@ class InteractiveSession:
                 console.print(f"[dim]切换到报告模式生成PDF...[/dim]")
                 self.switch_mode("report")
 
-            with console.status("[cyan]正在生成报告内容...[/cyan]", spinner="dots"):
-                # 生成报告内容
-                report_content = self.app.run(topic)
-
-                # 也存储为最后结果
-                self._last_result = report_content
-
-            with console.status("[cyan]正在生成PDF...[/cyan]", spinner="dots"):
+            with console.status("[cyan]正在生成LaTeX PDF报告...[/cyan]", spinner="dots"):
                 # 生成PDF文件名
                 from datetime import datetime
                 import re
@@ -173,16 +167,25 @@ class InteractiveSession:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 safe_topic = re.sub(r"[^\w\s-]", "", topic)[:20].strip()
                 safe_topic = re.sub(r"[-\s]+", "_", safe_topic)
-                output_path = Path(f"report_{safe_topic}_{timestamp}.pdf")
+                output_path = Path(f"report_latex_{safe_topic}_{timestamp}.pdf")
 
-                # 生成PDF
-                pdf_path = generate_report_pdf(
-                    content=report_content,
+                # 使用LaTeX生成PDF
+                pdf_path = self.app.run(
+                    topic,
+                    output_format="latex",
                     output_path=output_path,
-                    title=f"技术报告: {topic}",
                 )
 
-            console.print(f"[green]✓ PDF已生成: {pdf_path}[/green]")
+                # 如果返回的是路径，则使用该路径；否则可能是错误信息
+                if isinstance(pdf_path, str) and pdf_path.endswith('.pdf'):
+                    # 存储最后结果（可能是LaTeX内容，但我们存储路径）
+                    self._last_result = pdf_path
+                    console.print(f"[green]✓ LaTeX PDF已生成: {pdf_path}[/green]")
+                else:
+                    # 可能是错误信息或LaTeX内容
+                    console.print(f"[yellow]PDF生成可能有问题: {pdf_path[:100]}...[/yellow]")
+                    # 仍然存储
+                    self._last_result = pdf_path
 
             # 如果切换了模式，询问是否切换回去
             if hasattr(self, 'original_mode') and self.original_mode != "report":
@@ -209,7 +212,6 @@ class InteractiveSession:
             with console.status("[cyan]正在生成PDF...[/cyan]", spinner="dots"):
                 # 生成PDF文件名
                 from datetime import datetime
-                import re
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 safe_topic = "cached_result"  # 标记这是缓存的结果

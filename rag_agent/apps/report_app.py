@@ -82,6 +82,8 @@ class ReportApp(BaseApp):
         # 处理不同的输出格式
         if output_format == "pdf":
             return self._generate_pdf_report(query, report, documents, output_path)
+        elif output_format == "latex":
+            return self._generate_latex_report(query, documents, output_path)
         else:
             return report
 
@@ -133,6 +135,95 @@ class ReportApp(BaseApp):
             console.print(f"[red]生成 PDF 失败: {e}[/red]")
             console.print("[yellow]返回 Markdown 格式报告[/yellow]")
             return report_content
+
+    def _generate_latex_report(
+        self,
+        query: str,
+        documents: list[Document],
+        output_path: str | Path | None = None,
+    ) -> str:
+        """生成 LaTeX 报告并使用 MCP 服务编译为 PDF
+
+        Args:
+            query: 报告主题
+            documents: 参考文档列表
+            output_path: 输出路径，如果为 None 则自动生成
+
+        Returns:
+            生成的 PDF 文件路径或 LaTeX 内容（如果编译失败）
+        """
+        from datetime import datetime
+        import re
+        from pathlib import Path
+
+        console.print("[cyan]正在生成 LaTeX 报告...[/cyan]")
+
+        try:
+            # 生成 LaTeX 内容
+            latex_content = self.engine.generate_latex_content(query, documents)
+
+            # 读取模板文件
+            template_path = Path(__file__).parent.parent / "mcp" / "templates" / "default.tex"
+            if not template_path.exists():
+                console.print(f"[yellow]模板文件不存在: {template_path}[/yellow]")
+                console.print("[yellow]使用最小模板[/yellow]")
+                template = r"""\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{ctex}
+
+\title{技术报告: {{title}}}
+\author{RAG Agent \\ \texttt{生成时间: \today}}
+\date{}
+
+\begin{document}
+\maketitle
+
+{{content}}
+
+\end{document}"""
+            else:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template = f.read()
+
+            # 替换占位符
+            full_latex = template.replace('{{title}}', query)
+            full_latex = full_latex.replace('{{content}}', latex_content)
+
+            # 生成输出路径
+            if output_path is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                safe_title = re.sub(r"[^\w\s-]", "", query)[:20].strip()
+                safe_title = re.sub(r"[-\s]+", "_", safe_title)
+                output_path = Path(f"report_latex_{safe_title}_{timestamp}.pdf")
+            else:
+                output_path = Path(output_path)
+
+            # 调用 LaTeX MCP 客户端编译
+            from rag_agent.mcp.latex_client import compile_latex
+            result = compile_latex(
+                content=full_latex,
+                format="pdf",
+                template="custom"  # 使用custom模板，因为内容已经是完整文档
+            )
+
+            if result.get("success"):
+                # 复制到目标路径
+                import shutil
+                source_path = Path(result["output_path"])
+                shutil.copy(source_path, output_path)
+                console.print(f"[green]✓ LaTeX PDF 报告已生成: {output_path}[/green]")
+                return str(output_path)
+            else:
+                error_msg = result.get("error", "未知错误")
+                console.print(f"[red]LaTeX 编译失败: {error_msg}[/red]")
+                # 返回 LaTeX 内容作为备选
+                console.print("[yellow]返回 LaTeX 格式报告[/yellow]")
+                return full_latex
+
+        except Exception as e:
+            console.print(f"[red]生成 LaTeX 报告失败: {e}[/red]")
+            # 返回错误信息
+            return f"生成 LaTeX 报告失败: {e}"
 
     def get_context(self, query: str, k: int = 5) -> list[Document]:
         """获取相关上下文

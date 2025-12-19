@@ -1,0 +1,234 @@
+"""LaTeX MCP Client
+
+Simple client for interacting with the LaTeX MCP server for document compilation
+and TikZ diagram rendering using MCP Python SDK.
+Following the official MCP SDK example pattern.
+"""
+
+import asyncio
+import logging
+from typing import Any, Dict, Optional
+
+import mcp.types
+from mcp import StdioServerParameters
+from mcp.client.session import ClientSession
+from mcp.client.stdio import stdio_client
+
+logger = logging.getLogger(__name__)
+
+
+def create_server_params() -> StdioServerParameters:
+    """Create StdioServerParameters for connecting to LaTeX MCP server.
+
+    Assumes the mcp-latex-server container is running via podman compose.
+    """
+    return StdioServerParameters(
+        command="podman",
+        args=["exec", "-i", "mcp-latex-server", "python", "-m", "mcp_latex_tool"],
+        env=None,
+    )
+
+
+async def compile_latex_async(
+    content: str,
+    format: str = "pdf",
+    template: str = "article",
+    server_params: Optional[StdioServerParameters] = None,
+) -> Dict[str, Any]:
+    """Compile LaTeX document asynchronously.
+
+    Args:
+        content: LaTeX document content.
+        format: Output format: "pdf", "dvi", or "ps".
+        template: Document template: "article", "report", "book", "beamer", or "custom".
+        server_params: Optional StdioServerParameters. If None, uses default.
+
+    Returns:
+        Dictionary with compilation results.
+    """
+    if server_params is None:
+        server_params = create_server_params()
+
+    try:
+        async with stdio_client(server_params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                # Initialize the connection
+                await session.initialize()
+
+                # Call the compile_latex tool
+                result = await session.call_tool(
+                    "compile_latex",
+                    arguments={
+                        "content": content,
+                        "format": format,
+                        "template": template,
+                    },
+                )
+
+                # Parse the result
+                if not result.content:
+                    return {"success": False, "error": "Empty response from server"}
+
+                # The server returns TextContent with formatted message
+                # Extract the text from the first content block
+                content_block = result.content[0]
+                if isinstance(content_block, mcp.types.TextContent):
+                    response_text = content_block.text
+                else:
+                    # Try to get text from any available attribute
+                    response_text = str(content_block)
+
+                # Check for success/failure
+                if "❌" in response_text or "Failed" in response_text:
+                    # Try to extract error message
+                    lines = [line.strip() for line in response_text.split("\n") if line.strip()]
+                    error_msg = lines[-1] if lines else "Compilation failed"
+                    return {"success": False, "error": error_msg, "raw_response": response_text}
+
+                # Extract information from success response
+                lines = response_text.split("\n")
+                result_data = {
+                    "success": True,
+                    "format": format,
+                    "template": template,
+                    "raw_response": response_text,
+                }
+
+                # Parse the formatted response
+                for line in lines:
+                    line = line.strip()
+                    if "📁 Location:" in line:
+                        result_data["output_path"] = line.split("📁 Location:", 1)[1].strip()
+                    elif "📄 File:" in line:
+                        result_data["filename"] = line.split("📄 File:", 1)[1].strip()
+                    elif "📄 Format:" in line:
+                        result_data["format"] = line.split("📄 Format:", 1)[1].strip()
+                    elif "📋 Template:" in line:
+                        result_data["template"] = line.split("📋 Template:", 1)[1].strip()
+                    elif "📋 Log:" in line:
+                        result_data["log_path"] = line.split("📋 Log:", 1)[1].strip()
+
+                return result_data
+
+    except Exception as e:
+        logger.error(f"LaTeX compilation error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def render_tikz_async(
+    tikz_code: str,
+    output_format: str = "pdf",
+    server_params: Optional[StdioServerParameters] = None,
+) -> Dict[str, Any]:
+    """Render TikZ diagram asynchronously.
+
+    Args:
+        tikz_code: TikZ code for the diagram.
+        output_format: Output format: "pdf", "png", or "svg".
+        server_params: Optional StdioServerParameters. If None, uses default.
+
+    Returns:
+        Dictionary with rendering results.
+    """
+    if server_params is None:
+        server_params = create_server_params()
+
+    try:
+        async with stdio_client(server_params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                # Initialize the connection
+                await session.initialize()
+
+                # Call the render_tikz tool
+                result = await session.call_tool(
+                    "render_tikz",
+                    arguments={
+                        "tikz_code": tikz_code,
+                        "output_format": output_format,
+                    },
+                )
+
+                # Parse the result
+                if not result.content:
+                    return {"success": False, "error": "Empty response from server"}
+
+                # Extract text from content block
+                content_block = result.content[0]
+                if isinstance(content_block, mcp.types.TextContent):
+                    response_text = content_block.text
+                else:
+                    response_text = str(content_block)
+
+                # Check for success/failure
+                if "❌" in response_text or "Failed" in response_text:
+                    lines = [line.strip() for line in response_text.split("\n") if line.strip()]
+                    error_msg = lines[-1] if lines else "Rendering failed"
+                    return {"success": False, "error": error_msg, "raw_response": response_text}
+
+                lines = response_text.split("\n")
+                result_data = {
+                    "success": True,
+                    "format": output_format,
+                    "raw_response": response_text,
+                }
+
+                for line in lines:
+                    line = line.strip()
+                    if "📁 Location:" in line:
+                        result_data["output_path"] = line.split("📁 Location:", 1)[1].strip()
+                    elif "🎨 File:" in line:
+                        result_data["filename"] = line.split("🎨 File:", 1)[1].strip()
+                    elif "📄 Format:" in line:
+                        result_data["format"] = line.split("📄 Format:", 1)[1].strip()
+                    elif "📄 Source PDF:" in line:
+                        result_data["source_pdf"] = line.split("📄 Source PDF:", 1)[1].strip()
+
+                return result_data
+
+    except Exception as e:
+        logger.error(f"TikZ rendering error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# Synchronous versions for easier integration
+def compile_latex(
+    content: str,
+    format: str = "pdf",
+    template: str = "article",
+    server_params: Optional[StdioServerParameters] = None,
+) -> Dict[str, Any]:
+    """Compile LaTeX document synchronously."""
+    try:
+        # Try to get existing event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Create new event loop if current one is running
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        # No event loop, create new one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(compile_latex_async(content, format, template, server_params))
+
+
+def render_tikz(
+    tikz_code: str,
+    output_format: str = "pdf",
+    server_params: Optional[StdioServerParameters] = None,
+) -> Dict[str, Any]:
+    """Render TikZ diagram synchronously."""
+    try:
+        # Try to get existing event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Create new event loop if current one is running
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        # No event loop, create new one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(render_tikz_async(tikz_code, output_format, server_params))

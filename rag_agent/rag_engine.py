@@ -308,6 +308,78 @@ class RAGEngine:
             console.print(f"[red]生成报告失败: {e}[/red]")
             return f"生成报告失败: {e}"
 
+    def generate_latex_content(self, topic: str, documents: list[Document]) -> str:
+        """
+        生成LaTeX格式的报告内容
+
+        Args:
+            topic: 报告主题
+            documents: 参考文档列表
+
+        Returns:
+            LaTeX格式的报告内容（包括摘要和章节，但不包括文档包装）
+        """
+        if not self.llm:
+            raise RuntimeError("RAG 引擎未初始化，请先调用 initialize()")
+
+        console.print(f"[cyan]正在生成LaTeX内容: {topic}[/cyan]")
+
+        try:
+            context = "\n\n".join([doc.page_content for doc in documents])
+
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "你是一个专业的技术报告写作专家，精通LaTeX排版。请基于提供的上下文，撰写一份详细、专业的技术报告。"
+                        "报告必须使用纯LaTeX格式（不含文档类声明和导言区），包含以下结构：\n\n"
+                        "\\begin{{abstract}}\n"
+                        "简要概述报告内容，约200字\n"
+                        "\\end{{abstract}}\n\n"
+                        "\\section{{技术背景与发展趋势}}\n"
+                        "详细描述该技术的发展历程和当前趋势，约300字\n\n"
+                        "\\section{{主要技术特点与原理}}\n"
+                        "深入分析核心技术特点和工作原理，约400字\n\n"
+                        "\\section{{应用领域与案例分析}}\n"
+                        "介绍主要应用场景和具体案例，约300字\n\n"
+                        "\\section{{技术对比分析}}\n"
+                        "提供不同技术方案的对比，包括优缺点，使用表格形式展示\n\n"
+                        "\\section{{挑战与未来展望}}\n"
+                        "分析当前面临的挑战和未来发展方向，约200字\n\n"
+                        "\\section{{结论}}\n"
+                        "总结全文，提出观点和建议，约150字\n\n"
+                        "写作要求：\n"
+                        "1. 使用专业的学术语言和技术术语\n"
+                        "2. 包含具体的技术细节和实例\n"
+                        "3. 结构清晰，逻辑严谨\n"
+                        "4. 每个部分都要有充分的内容\n"
+                        "5. 总字数控制在1500-2000字之间\n"
+                        "6. 重要概念用\\textbf{{粗体}}标记\n"
+                        "7. 使用LaTeX环境：itemize、enumerate、table、tabular等\n"
+                        "8. 在技术对比部分必须包含一个tabular表格\n"
+                        "9. 适当使用有序列表、无序列表和引用\n"
+                        "10. 可以包含简单的数学公式（使用$...$或\\[...\\]）\n"
+                        "11. 不要使用图表、tikz等复杂图形\n"
+                        "12. 确保所有LaTeX语法正确，可以直接编译\n"
+                        "13. 输出必须是纯LaTeX代码，不要包含任何解释性文字\n",
+                    ),
+                    (
+                        "human",
+                        "报告主题：{topic}\n\n参考文档：\n{context}\n\n"
+                        "请基于以上文档，按照要求的结构撰写一份详细、专业的LaTeX格式技术报告。"
+                        "只输出LaTeX代码，不要包含其他任何内容。",
+                    ),
+                ]
+            )
+
+            chain = prompt | self.llm
+            response = chain.invoke({"topic": topic, "context": context})
+            return str(response.content)
+
+        except Exception as e:
+            console.print(f"[red]生成LaTeX内容失败: {e}[/red]")
+            return f"生成LaTeX内容失败: {e}"
+
     def query(self, question: str) -> dict[str, Any]:
         """
         查询问题（保留向后兼容的高层接口）

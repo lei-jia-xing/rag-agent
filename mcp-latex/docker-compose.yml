@@ -8,8 +8,7 @@ services:
     stdin_open: true
     tty: true
     
-    # Note: MCP servers use stdio, not HTTP, so port mapping isn't used
-    # The port is just for reference
+    # MCP servers use stdio, but adding port for debugging/monitoring
     # ports:
     #   - "8000:8000"
     
@@ -23,6 +22,9 @@ services:
       # Output directories
       - ./documents:/workspace/documents
       - ./logs:/workspace/logs
+      # Source code for hot reloading
+      - ./mcp_latex_tool.py:/workspace/mcp_latex_tool.py
+      - ./run_server.py:/workspace/run_server.py
       
       # Cache directories for faster LaTeX compilation
       - latex-cache:/home/mcp/.cache/latex

@@ -73,9 +73,13 @@ class LaTeXTool:
                 with open(tex_file, "w") as f:
                     f.write(content)
 
-                # Choose compiler based on format
+                # Choose compiler based on format and content
                 if format == "pdf":
-                    compiler = "pdflatex"
+                    # Use xelatex for documents with ctex (Chinese support)
+                    if "\\usepackage{ctex}" in content or "\\usepackage[" in content and "ctex" in content:
+                        compiler = "xelatex"
+                    else:
+                        compiler = "pdflatex"
                 else:
                     compiler = "latex"
 
@@ -257,73 +261,122 @@ class MCPLaTeXServer:
         
     def _setup_tools(self):
         """Register MCP tools."""
-        
+
+        @self.server.list_tools()
+        async def handle_list_tools() -> list[types.Tool]:
+            """List available tools."""
+            return [
+                types.Tool(
+                    name="compile_latex",
+                    description="Compile LaTeX documents to various formats (PDF, DVI, PS)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "content": {
+                                "type": "string",
+                                "description": "LaTeX document content"
+                            },
+                            "format": {
+                                "type": "string",
+                                "description": "Output format",
+                                "enum": ["pdf", "dvi", "ps"],
+                                "default": "pdf"
+                            },
+                            "template": {
+                                "type": "string",
+                                "description": "Document template",
+                                "enum": ["article", "report", "book", "beamer", "custom"],
+                                "default": "article"
+                            }
+                        },
+                        "required": ["content"]
+                    }
+                ),
+                types.Tool(
+                    name="render_tikz",
+                    description="Render TikZ diagrams as standalone images",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "tikz_code": {
+                                "type": "string",
+                                "description": "TikZ code for the diagram"
+                            },
+                            "output_format": {
+                                "type": "string",
+                                "description": "Output format",
+                                "enum": ["pdf", "png", "svg"],
+                                "default": "pdf"
+                            }
+                        },
+                        "required": ["tikz_code"]
+                    }
+                )
+            ]
+
         @self.server.call_tool()
-        async def compile_latex(arguments: Dict[str, Any]) -> List[types.TextContent]:
+        async def handle_tool_call(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
             """
-            Compile LaTeX documents to various formats.
-            
-            Parameters:
-            - content: LaTeX document content
-            - format: Output format ("pdf", "dvi", "ps", default: "pdf")
-            - template: Document template ("article", "report", "book", "beamer", "custom", default: "article")
+            Handle tool calls by routing to the appropriate tool implementation.
             """
-            result = await self.latex_tool.compile_latex(
-                content=arguments.get('content', ''),
-                format=arguments.get('format', 'pdf'),
-                template=arguments.get('template', 'article')
-            )
-            
-            # Format response
-            if result['success']:
-                log_text = ""
-                if result.get('log_path'):
-                    log_text = f"\n📋 Log: {result['log_path']}"
-                    
-                response = f"""📄 Document Compiled Successfully!
+            if name == "compile_latex":
+                # Compile LaTeX documents
+                result = await self.latex_tool.compile_latex(
+                    content=arguments.get('content', ''),
+                    format=arguments.get('format', 'pdf'),
+                    template=arguments.get('template', 'article')
+                )
+
+                # Format response
+                if result['success']:
+                    log_text = ""
+                    if result.get('log_path'):
+                        log_text = f"\n📋 Log: {result['log_path']}"
+
+                    response = f"""📄 Document Compiled Successfully!
 
 📄 File: {os.path.basename(result['output_path'])}
 📁 Location: {result['output_path']}
 📄 Format: {result['format']}
 📋 Template: {result['template']}{log_text}"""
-            else:
-                response = f"""❌ Document Compilation Failed
+                else:
+                    response = f"""❌ Document Compilation Failed
 
 Error: {result['error']}"""
-            
-            return [types.TextContent(type="text", text=response)]
-            
-        @self.server.call_tool()
-        async def render_tikz(arguments: Dict[str, Any]) -> List[types.TextContent]:
-            """
-            Render TikZ diagrams as standalone images.
-            
-            Parameters:
-            - tikz_code: TikZ code for the diagram
-            - output_format: Output format ("pdf", "png", "svg", default: "pdf")
-            """
-            result = await self.latex_tool.render_tikz(
-                tikz_code=arguments.get('tikz_code', ''),
-                output_format=arguments.get('output_format', 'pdf')
-            )
-            
-            # Format response
-            if result['success']:
-                source_text = ""
-                if result.get('source_pdf'):
-                    source_text = f"\n📄 Source PDF: {result['source_pdf']}"
-                    
-                response = f"""🎨 TikZ Diagram Rendered Successfully!
+
+                return [types.TextContent(type="text", text=response)]
+
+            elif name == "render_tikz":
+                # Render TikZ diagrams
+                result = await self.latex_tool.render_tikz(
+                    tikz_code=arguments.get('tikz_code', ''),
+                    output_format=arguments.get('output_format', 'pdf')
+                )
+
+                # Format response
+                if result['success']:
+                    source_text = ""
+                    if result.get('source_pdf'):
+                        source_text = f"\n📄 Source PDF: {result['source_pdf']}"
+
+                    response = f"""🎨 TikZ Diagram Rendered Successfully!
 
 🎨 File: {os.path.basename(result['output_path'])}
 📁 Location: {result['output_path']}
 📄 Format: {result['format']}{source_text}"""
-            else:
-                response = f"""❌ TikZ Rendering Failed
+                else:
+                    response = f"""❌ TikZ Rendering Failed
 
 Error: {result['error']}"""
-            
-            return [types.TextContent(type="text", text=response)]
+
+                return [types.TextContent(type="text", text=response)]
+
+            else:
+                # Unknown tool
+                return [types.TextContent(
+                    type="text",
+                    text=f"❌ Unknown tool: {name}"
+                )]
     
     def run(self):
         """Run the MCP server."""

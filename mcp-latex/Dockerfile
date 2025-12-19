@@ -31,6 +31,8 @@ RUN apt-get update && apt-get install -y \
     texlive-fonts-recommended \
     texlive-fonts-extra \
     texlive-pictures \
+    # Chinese language support (ctex)
+    texlive-lang-chinese \
     # Additional LaTeX engines
     texlive-xetex \
     texlive-luatex \
@@ -68,8 +70,8 @@ RUN useradd --create-home --shell /bin/bash mcp && \
     chown -R mcp:mcp /workspace
 
 # Copy application files
-COPY --chown=mcp:mcp *.py /workspace/
-RUN chmod +x /workspace/run_server.py /workspace/mcp_latex_tool.py
+# COPY --chown=mcp:mcp *.py /workspace/
+# RUN chmod +x /workspace/run_server.py /workspace/mcp_latex_tool.py
 
 # Switch to non-root user
 USER mcp
