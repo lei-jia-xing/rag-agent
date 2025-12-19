@@ -135,10 +135,29 @@ class LaTeXTool:
                         "log_path": log_path,
                     }
 
-                # Extract error from log file
+                # Extract error from log file and save failed files for debugging
                 log_file = os.path.join(tmpdir, "document.log")
                 error_msg = "Compilation failed"
+                failed_tex_path = None
+                failed_log_path = None
+
+                # Save failed .tex file for debugging
+                if os.path.exists(tex_file):
+                    failed_tex_path = os.path.join(
+                        str(self.latex_output_dir),
+                        f"failed_{os.getpid()}.tex"
+                    )
+                    shutil.copy(tex_file, failed_tex_path)
+
                 if os.path.exists(log_file):
+                    # Save log file for debugging
+                    failed_log_path = os.path.join(
+                        str(self.latex_output_dir),
+                        f"failed_{os.getpid()}.log"
+                    )
+                    shutil.copy(log_file, failed_log_path)
+
+                    # Extract error messages
                     with open(log_file, "r") as f:
                         log_content = f.read()
                         # Look for error messages
@@ -150,7 +169,12 @@ class LaTeXTool:
                             if error_lines:
                                 error_msg = "\n".join(error_lines[:5])
 
-                return {"success": False, "error": error_msg}
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "failed_tex_path": failed_tex_path,
+                    "failed_log_path": failed_log_path
+                }
 
         except FileNotFoundError:
             return {

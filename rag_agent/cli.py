@@ -159,36 +159,35 @@ class InteractiveSession:
                 console.print(f"[dim]切换到报告模式生成PDF...[/dim]")
                 self.switch_mode("report")
 
-            with console.status("[cyan]正在生成LaTeX PDF报告...[/cyan]", spinner="dots"):
-                # 生成PDF文件名
-                from datetime import datetime
-                import re
+            # 生成PDF文件名
+            from datetime import datetime
+            import re
 
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                safe_topic = re.sub(r"[^\w\s-]", "", topic)[:20].strip()
-                safe_topic = re.sub(r"[-\s]+", "_", safe_topic)
-                output_path = Path(f"report_latex_{safe_topic}_{timestamp}.pdf")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_topic = re.sub(r"[^\w\s-]", "", topic)[:20].strip()
+            safe_topic = re.sub(r"[-\s]+", "_", safe_topic)
+            output_path = Path(f"report_latex_{safe_topic}_{timestamp}.pdf")
 
-                # 使用LaTeX生成PDF
-                pdf_path = self.app.run(
-                    topic,
-                    output_format="latex",
-                    output_path=output_path,
-                )
+            # 使用LaTeX生成PDF（进度由report_app显示）
+            pdf_path = self.app.run(
+                topic,
+                output_format="latex",
+                output_path=output_path,
+            )
 
-                # 如果返回的是路径，则使用该路径；否则可能是错误信息
-                if isinstance(pdf_path, str) and pdf_path.endswith('.pdf'):
-                    # 存储最后结果（可能是LaTeX内容，但我们存储路径）
-                    self._last_result = pdf_path
-                    console.print(f"[green]✓ LaTeX PDF已生成: {pdf_path}[/green]")
-                else:
-                    # 可能是错误信息或LaTeX内容
-                    console.print(f"[yellow]PDF生成可能有问题: {pdf_path[:100]}...[/yellow]")
-                    # 仍然存储
-                    self._last_result = pdf_path
+            # 如果返回的是路径，则使用该路径；否则可能是错误信息
+            if isinstance(pdf_path, str) and pdf_path.endswith(".pdf"):
+                # 存储最后结果（可能是LaTeX内容，但我们存储路径）
+                self._last_result = pdf_path
+                console.print(f"\n[green]✓ LaTeX PDF已生成: {pdf_path}[/green]")
+            else:
+                # 可能是错误信息或LaTeX内容
+                console.print(f"\n[yellow]PDF生成可能有问题: {pdf_path[:100]}...[/yellow]")
+                # 仍然存储
+                self._last_result = pdf_path
 
             # 如果切换了模式，询问是否切换回去
-            if hasattr(self, 'original_mode') and self.original_mode != "report":
+            if hasattr(self, "original_mode") and self.original_mode != "report":
                 console.print(f"[dim]提示：您仍在报告模式，使用 /{self.original_mode} 可切换回去[/dim]")
 
         except Exception as e:
@@ -202,7 +201,7 @@ class InteractiveSession:
             self.generate_pdf_report(topic)
             return
 
-        if not hasattr(self, '_last_result') or not self._last_result:
+        if not hasattr(self, "_last_result") or not self._last_result:
             # 如果没有上次结果，提示用户指定主题
             console.print("[yellow]没有上次的查询结果，请使用 /pdf <主题> 来生成新的PDF报告[/yellow]")
             return
@@ -370,7 +369,6 @@ def main_callback(
         console.print("RAG Agent v0.1.0")
         raise typer.Exit()
 
-    # 没有子命令时，默认进入 QA 交互模式
     if ctx.invoked_subcommand is None:
         session = InteractiveSession(mode="qa")
         session.run()

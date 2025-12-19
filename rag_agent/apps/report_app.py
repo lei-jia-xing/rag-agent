@@ -61,6 +61,8 @@ class ReportApp(BaseApp):
         Returns:
             Markdown 格式的报告或 PDF 文件路径
         """
+        import time
+
         if not self._initialized:
             self.initialize()
 
@@ -70,8 +72,12 @@ class ReportApp(BaseApp):
         output_format = kwargs.get("output_format", "markdown").lower()
         output_path = kwargs.get("output_path", None)
 
-        # 检索相关文档
+        # Stage 1: 检索相关文档
+        console.print("[cyan][1/4] 检索相关文档...[/cyan]")
+        start_time = time.time()
         documents = self.engine.retrieve(query, k=k)
+        elapsed = time.time() - start_time
+        console.print(f"[green]  ✓ 检索完成，找到 {len(documents)} 个相关文档 ({elapsed:.1f}s)[/green]")
 
         if verbose:
             console.print(f"[dim]检索到 {len(documents)} 个相关文档[/dim]")
@@ -155,12 +161,15 @@ class ReportApp(BaseApp):
         from datetime import datetime
         import re
         from pathlib import Path
-
-        console.print("[cyan]正在生成 LaTeX 报告...[/cyan]")
+        import time
 
         try:
-            # 生成 LaTeX 内容
+            # Stage 2: 生成 LaTeX 内容
+            console.print("\n[cyan][2/4] 生成报告内容...[/cyan]")
+            start_time = time.time()
             latex_content = self.engine.generate_latex_content(query, documents)
+            elapsed = time.time() - start_time
+            console.print(f"[green]  ✓ 内容生成完成 ({elapsed:.1f}s)[/green]")
 
             # 读取模板文件
             template_path = Path(__file__).parent.parent / "mcp" / "templates" / "default.tex"
@@ -182,12 +191,12 @@ class ReportApp(BaseApp):
 
 \end{document}"""
             else:
-                with open(template_path, 'r', encoding='utf-8') as f:
+                with open(template_path, "r", encoding="utf-8") as f:
                     template = f.read()
 
             # 替换占位符
-            full_latex = template.replace('{{title}}', query)
-            full_latex = full_latex.replace('{{content}}', latex_content)
+            full_latex = template.replace("{{title}}", query)
+            full_latex = full_latex.replace("{{content}}", latex_content)
 
             # 生成输出路径
             if output_path is None:
@@ -198,24 +207,41 @@ class ReportApp(BaseApp):
             else:
                 output_path = Path(output_path)
 
-            # 调用 LaTeX MCP 客户端编译
+            # Stage 3: 编译 LaTeX 文档
+            console.print("\n[cyan][3/4] 编译LaTeX文档...[/cyan]")
+            start_time = time.time()
             from rag_agent.mcp.latex_client import compile_latex
+
             result = compile_latex(
                 content=full_latex,
                 format="pdf",
-                template="custom"  # 使用custom模板，因为内容已经是完整文档
+                template="custom",  # 使用custom模板，因为内容已经是完整文档
             )
+            elapsed = time.time() - start_time
 
             if result.get("success"):
-                # 复制到目标路径
+                console.print(f"[green]  ✓ LaTeX编译成功 ({elapsed:.1f}s)[/green]")
+
+                # Stage 4: 保存 PDF 文件
+                console.print("\n[cyan][4/4] 保存PDF文件...[/cyan]")
+                start_time = time.time()
                 import shutil
+
                 source_path = Path(result["output_path"])
                 shutil.copy(source_path, output_path)
-                console.print(f"[green]✓ LaTeX PDF 报告已生成: {output_path}[/green]")
+                elapsed = time.time() - start_time
+                console.print(f"[green]  ✓ PDF文件已保存 ({elapsed:.2f}s)[/green]")
                 return str(output_path)
             else:
                 error_msg = result.get("error", "未知错误")
                 console.print(f"[red]LaTeX 编译失败: {error_msg}[/red]")
+
+                # 显示调试文件路径
+                if result.get("failed_tex_path"):
+                    console.print(f"[yellow]调试: 失败的.tex文件已保存到: {result['failed_tex_path']}[/yellow]")
+                if result.get("failed_log_path"):
+                    console.print(f"[yellow]调试: 编译日志已保存到: {result['failed_log_path']}[/yellow]")
+
                 # 返回 LaTeX 内容作为备选
                 console.print("[yellow]返回 LaTeX 格式报告[/yellow]")
                 return full_latex

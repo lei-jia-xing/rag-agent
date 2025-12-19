@@ -7,7 +7,8 @@ Following the official MCP SDK example pattern.
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any
 
 import mcp.types
 from mcp import StdioServerParameters
@@ -15,6 +16,24 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import stdio_client
 
 logger = logging.getLogger(__name__)
+
+
+def convert_container_path_to_host(container_path: str) -> str:
+    """Convert container path to host path.
+
+    Container: /workspace/documents/latex/document_49.pdf
+    Host: /home/hunter/Workspace/rag-agent/mcp-latex/documents/latex/document_49.pdf
+    """
+    if container_path.startswith("/workspace/documents/"):
+        # Get the relative path after /workspace/documents/
+        relative_path = container_path.replace("/workspace/documents/", "")
+        # Get the project root (parent of rag_agent package)
+        current_file = Path(__file__)  # rag_agent/mcp/latex_client.py
+        project_root = current_file.parent.parent.parent  # Go up 3 levels
+        # Build host path
+        host_path = project_root / "mcp-latex" / "documents" / relative_path
+        return str(host_path)
+    return container_path
 
 
 def create_server_params() -> StdioServerParameters:
@@ -33,8 +52,8 @@ async def compile_latex_async(
     content: str,
     format: str = "pdf",
     template: str = "article",
-    server_params: Optional[StdioServerParameters] = None,
-) -> Dict[str, Any]:
+    server_params: StdioServerParameters | None = None,
+) -> dict[str, Any]:
     """Compile LaTeX document asynchronously.
 
     Args:
@@ -98,7 +117,8 @@ async def compile_latex_async(
                 for line in lines:
                     line = line.strip()
                     if "📁 Location:" in line:
-                        result_data["output_path"] = line.split("📁 Location:", 1)[1].strip()
+                        container_path = line.split("📁 Location:", 1)[1].strip()
+                        result_data["output_path"] = convert_container_path_to_host(container_path)
                     elif "📄 File:" in line:
                         result_data["filename"] = line.split("📄 File:", 1)[1].strip()
                     elif "📄 Format:" in line:
@@ -106,7 +126,8 @@ async def compile_latex_async(
                     elif "📋 Template:" in line:
                         result_data["template"] = line.split("📋 Template:", 1)[1].strip()
                     elif "📋 Log:" in line:
-                        result_data["log_path"] = line.split("📋 Log:", 1)[1].strip()
+                        container_path = line.split("📋 Log:", 1)[1].strip()
+                        result_data["log_path"] = convert_container_path_to_host(container_path)
 
                 return result_data
 
@@ -118,8 +139,8 @@ async def compile_latex_async(
 async def render_tikz_async(
     tikz_code: str,
     output_format: str = "pdf",
-    server_params: Optional[StdioServerParameters] = None,
-) -> Dict[str, Any]:
+    server_params: StdioServerParameters | None = None,
+) -> dict[str, Any]:
     """Render TikZ diagram asynchronously.
 
     Args:
@@ -175,13 +196,15 @@ async def render_tikz_async(
                 for line in lines:
                     line = line.strip()
                     if "📁 Location:" in line:
-                        result_data["output_path"] = line.split("📁 Location:", 1)[1].strip()
+                        container_path = line.split("📁 Location:", 1)[1].strip()
+                        result_data["output_path"] = convert_container_path_to_host(container_path)
                     elif "🎨 File:" in line:
                         result_data["filename"] = line.split("🎨 File:", 1)[1].strip()
                     elif "📄 Format:" in line:
                         result_data["format"] = line.split("📄 Format:", 1)[1].strip()
                     elif "📄 Source PDF:" in line:
-                        result_data["source_pdf"] = line.split("📄 Source PDF:", 1)[1].strip()
+                        container_path = line.split("📄 Source PDF:", 1)[1].strip()
+                        result_data["source_pdf"] = convert_container_path_to_host(container_path)
 
                 return result_data
 
@@ -195,8 +218,8 @@ def compile_latex(
     content: str,
     format: str = "pdf",
     template: str = "article",
-    server_params: Optional[StdioServerParameters] = None,
-) -> Dict[str, Any]:
+    server_params: StdioServerParameters | None = None,
+) -> dict[str, Any]:
     """Compile LaTeX document synchronously."""
     try:
         # Try to get existing event loop
@@ -216,8 +239,8 @@ def compile_latex(
 def render_tikz(
     tikz_code: str,
     output_format: str = "pdf",
-    server_params: Optional[StdioServerParameters] = None,
-) -> Dict[str, Any]:
+    server_params: StdioServerParameters | None = None,
+) -> dict[str, Any]:
     """Render TikZ diagram synchronously."""
     try:
         # Try to get existing event loop
