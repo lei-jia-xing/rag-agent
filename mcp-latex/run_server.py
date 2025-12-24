@@ -24,11 +24,11 @@ async def main():
     logger.info("MCP LaTeX Server container is running")
     logger.info("Connect your MCP client to this container's stdio")
     logger.info("Container will stay alive until stopped")
-    
+
     # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     # Keep the container running
     try:
         while True:

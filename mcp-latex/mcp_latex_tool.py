@@ -5,21 +5,16 @@ Provides document compilation and TikZ diagram rendering through the Model Conte
 """
 
 import asyncio
-import json
 import logging
 import os
 import shutil
-import subprocess
-import sys
 import tempfile
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import mcp.server.stdio
 import mcp.types as types
-from mcp.server import NotificationOptions, Server, InitializationOptions
-from pydantic import AnyUrl
+from mcp.server import InitializationOptions, NotificationOptions, Server
 
 # Configure logging
 logging.basicConfig(
@@ -31,26 +26,26 @@ logger = logging.getLogger(__name__)
 
 class LaTeXTool:
     """LaTeX document compilation and TikZ rendering tool for MCP."""
-    
+
     def __init__(self, output_dir: Path):
         self.output_dir = output_dir
         self.latex_output_dir = output_dir / "latex"
         self.latex_output_dir.mkdir(exist_ok=True, parents=True)
-        
+
     async def compile_latex(
         self,
         content: str,
         format: str = "pdf",
         template: str = "article"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compile LaTeX document to various formats.
-        
+
         Args:
             content: LaTeX document content
             format: Output format (pdf, dvi, ps)
             template: Document template to use
-            
+
         Returns:
             Dictionary with compiled document path and metadata
         """
@@ -95,7 +90,7 @@ class LaTeXTool:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    stdout, stderr = await process.communicate()
+                    _stdout, _stderr = await process.communicate()
                     if process.returncode != 0 and i == 0:
                         # First compilation might fail due to references
                         logger.warning("First compilation pass had warnings")
@@ -158,7 +153,7 @@ class LaTeXTool:
                     shutil.copy(log_file, failed_log_path)
 
                     # Extract error messages
-                    with open(log_file, "r") as f:
+                    with open(log_file) as f:
                         log_content = f.read()
                         # Look for error messages
                         if "! " in log_content:
@@ -189,14 +184,14 @@ class LaTeXTool:
         self,
         tikz_code: str,
         output_format: str = "pdf"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Render TikZ diagram as standalone image.
-        
+
         Args:
             tikz_code: TikZ code for the diagram
             output_format: Output format (pdf, png, svg)
-            
+
         Returns:
             Dictionary with rendered diagram path
         """
@@ -273,7 +268,7 @@ class LaTeXTool:
 
 class MCPLaTeXServer:
     """MCP Server with LaTeX and TikZ integration."""
-    
+
     def __init__(self, port: int = 8000):
         self.server = Server("mcp-latex-server")
         self.port = port
@@ -282,7 +277,7 @@ class MCPLaTeXServer:
             self.project_root / os.getenv('DOCUMENT_OUTPUT_DIR', 'documents')
         )
         self._setup_tools()
-        
+
     def _setup_tools(self):
         """Register MCP tools."""
 
@@ -339,7 +334,7 @@ class MCPLaTeXServer:
             ]
 
         @self.server.call_tool()
-        async def handle_tool_call(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
+        async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
             """
             Handle tool calls by routing to the appropriate tool implementation.
             """
@@ -401,11 +396,11 @@ Error: {result['error']}"""
                     type="text",
                     text=f"❌ Unknown tool: {name}"
                 )]
-    
+
     def run(self):
         """Run the MCP server."""
         logger.info(f"Starting MCP LaTeX server on port {self.port}")
-        
+
         async def main():
             async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
                 await self.server.run(
@@ -420,13 +415,13 @@ Error: {result['error']}"""
                         ),
                     ),
                 )
-        
+
         asyncio.run(main())
 
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="MCP Server with LaTeX and TikZ Integration")
     parser.add_argument(
         "--port",
@@ -434,8 +429,8 @@ if __name__ == "__main__":
         default=8000,
         help="Port to run the server on"
     )
-    
+
     args = parser.parse_args()
-    
+
     server = MCPLaTeXServer(port=args.port)
     server.run()
