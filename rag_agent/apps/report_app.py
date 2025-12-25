@@ -14,6 +14,7 @@ from rich.console import Console
 from rag_agent.apps.base import AppConfig, BaseApp
 from rag_agent.pdf_generator import generate_report_pdf
 from rag_agent.rag_engine import RAGEngine
+from rag_agent.mcp import TemplateEngine
 
 console = Console()
 
@@ -55,7 +56,7 @@ class ReportApp(BaseApp):
             **kwargs: 额外参数
                 - k: 检索文档数量（默认 5，报告需要更多上下文）
                 - verbose: 是否显示检索结果
-                - output_format: 输出格式，支持 "markdown" 或 "pdf"
+                - output_format: 输出格式，支持 "markdown", "pdf", "latex" 或 "diagnosis"
                 - output_path: PDF 输出路径（当 output_format="pdf" 时使用）
 
         Returns:
@@ -90,6 +91,8 @@ class ReportApp(BaseApp):
             return self._generate_pdf_report(query, report, documents, output_path)
         elif output_format == "latex":
             return self._generate_latex_report(query, documents, output_path)
+        elif output_format == "diagnosis":
+            return self._generate_diagnosis_report(query, documents, output_path)
         else:
             return report
 
@@ -251,7 +254,78 @@ class ReportApp(BaseApp):
             # 返回错误信息
             return f"生成 LaTeX 报告失败: {e}"
 
-    def get_context(self, query: str, k: int = 5) -> list[Document]:
+    def _generate_diagnosis_report(
+        self,
+        device_name: str,
+        documents: list[Document],
+        output_path: str | Path | None = None,
+    ) -> str:
+        """生成设备健康诊断报告（使用专业模板+LLM填空）
+
+        Args:
+            device_name: 设备名称
+            documents: 参考文档列表
+            output_path: 输出路径，如果为 None 则自动生成
+
+        Returns:
+            生成的 PDF 文件路径或 LaTeX 内容（如果编译失败）
+        """
+        import re
+        import time
+        from datetime import datetime
+
+        try:
+            # Stage 2: 生成诊断字段数据
+            console.print("\n[cyan][2/4] 生成诊断字段数据...[/cyan]")
+            start_time = time.time()
+            diagnosis_data = self.engine.generate_diagnosis_fields(device_name, documents)
+            elapsed = time.time() - start_time
+            console.print(f"[green]  ✓ 字段数据生成完成 ({elapsed:.1f}s)[/green]")
+            # 加载模板引擎
+            template_path = Path(__file__).parent.parent / "mcp" / "templates" / "device_diagnosis.tex"
+            # 使用模块级导入的 TemplateEngine
+            if not template_path.exists():
+                console.print(f"[yellow]模板文件不存在: {template_path}[/yellow]")
+                raise FileNotFoundError(f"模板文件不存在: {template_path}")
+            engine = TemplateEngine(template_path)
+            # 渲染 LaTeX 文档
+            full_latex = engine.render(diagnosis_data)
+            # 生成输出路径
+            if output_path is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                safe_name = re.sub(r"[^\w\s-]", "", device_name)[:20].strip()
+                safe_name = re.sub(r"[-\s]+", "_", safe_name)
+                output_path = Path(f"diagnosis_{safe_name}_{timestamp}.pdf")
+            else:
+                output_path = Path(output_path)
+            # Stage 3: 编译 LaTeX 文档
+            console.print("\n[cyan][3/4] 编译LaTeX文档...[/cyan]")
+            start_time = time.time()
+            from rag_agent.mcp.latex_client import compile_latex
+            result = compile_latex(content=full_latex, format="pdf", template="custom")
+            elapsed = time.time() - start_time
+            if result.get("success"):
+                console.print(f"[green]  ✓ LaTeX编译成功 ({elapsed:.1f}s)[/green]")
+                # Stage 4: 保存 PDF 文件
+                console.print("\n[cyan][4/4] 保存PDF文件...[/cyan]")
+                start_time = time.time()
+                import shutil
+                source_path = Path(result["output_path"])
+                shutil.copy(source_path, output_path)
+                elapsed = time.time() - start_time
+                console.print(f"[green]  ✓ PDF文件已保存 ({elapsed:.2f}s)[/green]")
+                return str(output_path)
+            else:
+                error_msg = result.get("error", "未知错误")
+                console.print(f"[red]LaTeX 编译失败: {error_msg}[/red]")
+                console.print("[yellow]返回 LaTeX 格式报告[/yellow]")
+                return full_latex
+        except Exception as e:
+            console.print(f"[red]生成诊断报告失败: {e}[/red]")
+            return f"生成诊断报告失败: {e}"
+
+
+def get_context(self, query: str, k: int = 5) -> list[Document]:
         """获取相关上下文
 
         Args:

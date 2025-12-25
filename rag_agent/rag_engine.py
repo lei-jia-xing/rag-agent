@@ -380,6 +380,56 @@ class RAGEngine:
             console.print(f"[red]生成LaTeX内容失败: {e}[/red]")
             return f"生成LaTeX内容失败: {e}"
 
+    def generate_diagnosis_fields(self, device_name: str, documents: list[Document]) -> dict[str, str]:
+        """
+        生成设备健康诊断报告的字段数据（JSON格式）
+
+        Args:
+            device_name: 设备名称
+            documents: 参考文档列表
+
+        Returns:
+            包含所有字段的字典，用于填充LaTeX模板
+        """
+        if not self.llm:
+            raise RuntimeError("RAG 引擎未初始化，请先调用 initialize()")
+
+        console.print(f"[cyan]正在生成诊断字段: {device_name}[/cyan]")
+
+        try:
+            context = "\n\n".join([doc.page_content for doc in documents])
+
+            import json
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "你是一个专业的设备健康诊断专家。基于提供的上下文信息，生成设备健康诊断报告的各个字段内容。你需要返回一个纯JSON格式的响应。\n\n返回的JSON必须包含以下字段：\n- title: 报告标题\n- report_id: 报告编号（格式：DX-YYYYMMDD-001）\n- device_name: 设备名称\n- device_model: 设备型号\n- location: 安装位置\n- diagnosis_date: 诊断日期\n- data_range: 数据采集范围\n- health_score: 整体健康评分（0-100）\n- health_status: 健康状态（正常/警告/异常/严重）\n- risk_level: 风险等级（低/中/高）\n- issue_count: 主要问题数\n- abstract: 诊断摘要\n- device_basic_info: 设备基本信息\n- operating_environment: 运行环境\n- maintenance_history: 历史维护记录\n- monitoring_data_summary: 监测数据汇总\n- key_metrics_analysis: 关键指标分析\n- trend_analysis: 趋势分析\n- anomaly_detection: 异常检测\n- fault_description: 故障现象描述\n- fault_cause_analysis: 故障原因分析\n- fault_location: 故障定位\n- urgent_measures: 紧急处理措施\n- maintenance_plan: 维护计划\n- spare_parts_suggestion: 备件建议\n- current_risks: 当前风险\n- potential_risks: 潜在风险\n- risk_control: 风险控制建议\n- conclusion_and_recommendations: 结论与建议\n- technical_parameters: 技术参数\n- related_standards: 相关标准\n- diagnosis_method: 诊断方法说明"),
+                ("human", "设备名称：{device_name}\n\n参考文档：\n{context}")
+            ])
+
+            chain = prompt | self.llm
+            response = chain.invoke({"device_name": device_name, "context": context})
+            response_text = str(response.content)
+
+            try:
+                data = json.loads(response_text)
+                return data
+            except json.JSONDecodeError:
+                if "```json" in response_text:
+                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in response_text:
+                    response_text = response_text.split("```")[1].split("```")[0].strip()
+                try:
+                    data = json.loads(response_text)
+                    return data
+                except json.JSONDecodeError as e:
+                    console.print(f"[red]JSON解析失败: {e}[/red]")
+                    console.print(f"[yellow]原始响应: {response_text[:500]}[/yellow]")
+                    raise ValueError("无法解析LLM返回的JSON数据") from e
+
+        except Exception as e:
+            console.print(f"[red]生成诊断字段失败: {e}[/red]")
+            raise
+
+
     def query(self, question: str) -> dict[str, Any]:
         """
         查询问题（保留向后兼容的高层接口）
