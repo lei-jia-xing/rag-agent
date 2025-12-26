@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "设备健康诊断报告",
+  "description": "设备健康状态诊断报告的填充字段定义",
+  "type": "object",
+  "required": [
+    "title",
+    "report_id",
+    "device_name",
+    "device_model",
+    "location",
+    "diagnosis_date",
+    "data_range",
+    "health_score",
+    "health_status",
+    "risk_level",
+    "abstract",
+    "conclusion_and_recommendations"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "报告标题"
+    },
+    "report_id": {
+      "type": "string",
+      "description": "报告编号，格式: DX-YYYYMMDD-001"
+    },
+    "device_name": {
+      "type": "string",
+      "description": "设备名称"
+    },
+    "device_model": {
+      "type": "string",
+      "description": "设备型号"
+    },
+    "location": {
+      "type": "string",
+      "description": "安装位置"
+    },
+    "diagnosis_date": {
+      "type": "string",
+      "description": "诊断日期，格式: YYYY-MM-DD"
+    },
+    "data_range": {
+      "type": "string",
+      "description": "数据采集范围（如：2024-01-01 至 2024-12-31）"
+    },
+    "health_score": {
+      "type": "integer",
+      "description": "整体健康评分（0-100）",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "health_status": {
+      "type": "string",
+      "description": "健康状态",
+      "enum": ["正常", "警告", "异常", "严重"]
+    },
+    "risk_level": {
+      "type": "string",
+      "description": "风险等级",
+      "enum": ["低", "中", "高"]
+    },
+    "issue_count": {
+      "type": "integer",
+      "description": "主要问题数量",
+      "minimum": 0
+    },
+    "abstract": {
+      "type": "string",
+      "description": "诊断摘要（200-500字）"
+    },
+    "device_basic_info": {
+      "type": "string",
+      "description": "设备基本信息"
+    },
+    "operating_environment": {
+      "type": "string",
+      "description": "运行环境描述"
+    },
+    "maintenance_history": {
+      "type": "string",
+      "description": "历史维护记录"
+    },
+    "monitoring_data_summary": {
+      "type": "string",
+      "description": "监测数据汇总"
+    },
+    "key_metrics_analysis": {
+      "type": "string",
+      "description": "关键指标分析"
+    },
+    "trend_analysis": {
+      "type": "string",
+      "description": "趋势分析"
+    },
+    "anomaly_detection": {
+      "type": "string",
+      "description": "异常检测结果"
+    },
+    "fault_description": {
+      "type": "string",
+      "description": "故障现象描述"
+    },
+    "fault_cause_analysis": {
+      "type": "string",
+      "description": "故障原因分析"
+    },
+    "fault_location": {
+      "type": "string",
+      "description": "故障定位"
+    },
+    "urgent_measures": {
+      "type": "string",
+      "description": "紧急处理措施"
+    },
+    "maintenance_plan": {
+      "type": "string",
+      "description": "维护计划"
+    },
+    "spare_parts_suggestion": {
+      "type": "string",
+      "description": "备件建议"
+    },
+    "current_risks": {
+      "type": "string",
+      "description": "当前风险"
+    },
+    "potential_risks": {
+      "type": "string",
+      "description": "潜在风险"
+    },
+    "risk_control": {
+      "type": "string",
+      "description": "风险控制建议"
+    },
+    "conclusion_and_recommendations": {
+      "type": "string",
+      "description": "结论与建议"
+    },
+    "technical_parameters": {
+      "type": "string",
+      "description": "技术参数"
+    },
+    "related_standards": {
+      "type": "string",
+      "description": "相关标准"
+    },
+    "diagnosis_method": {
+      "type": "string",
+      "description": "诊断方法说明"
+    }
+  }
+}

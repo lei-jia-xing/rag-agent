@@ -255,3 +255,119 @@ def render_tikz(
         asyncio.set_event_loop(loop)
 
     return loop.run_until_complete(render_tikz_async(tikz_code, output_format, server_params))
+
+
+async def generate_diagnosis_report_async(
+    data: dict[str, Any],
+    template_id: str = "device_diagnosis",
+    server_params: StdioServerParameters | None = None,
+) -> dict[str, Any]:
+    """Generate diagnosis report asynchronously.
+
+    Args:
+        data: Report data fields (32 fields)
+        template_id: Template ID (default: device_diagnosis)
+        server_params: Optional StdioServerParameters. If None, uses default.
+
+    Returns:
+        Dictionary with generation results.
+    """
+    if server_params is None:
+        server_params = create_server_params()
+
+    try:
+        async with stdio_client(server_params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                # Initialize the connection
+                await session.initialize()
+
+                # Call the generate_diagnosis_report tool
+                result = await session.call_tool(
+                    "generate_diagnosis_report",
+                    arguments={
+                        "data": data,
+                        "template_id": template_id,
+                    },
+                )
+
+                # Parse the result
+                if not result.content:
+                    return {"success": False, "error": "Empty response from server"}
+
+                content_block = result.content[0]
+                if isinstance(content_block, mcp.types.TextContent):
+                    response_text = content_block.text
+                else:
+                    response_text = str(content_block)
+
+                # Check for success/failure
+                if "❌" in response_text or "失败" in response_text:
+                    # Extract error message
+                    lines = [line.strip() for line in response_text.split("\n") if line.strip()]
+                    error_msg = lines[-1] if lines else "Generation failed"
+                    return {"success": False, "error": error_msg, "raw_response": response_text}
+
+                # Extract information from success response
+                result_data = {
+                    "success": True,
+                    "template_id": template_id,
+                    "raw_response": response_text,
+                }
+
+                for line in response_text.split("\n"):
+                    line = line.strip()
+                    if "📁 位置:" in line:
+                        container_path = line.split("📁 位置:", 1)[1].strip()
+                        result_data["output_path"] = convert_container_path_to_host(container_path)
+
+                return result_data
+
+    except Exception as e:
+        logger.error(f"Diagnosis report generation error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def generate_diagnosis_report(
+    data: dict[str, Any],
+    template_id: str = "device_diagnosis",
+    server_params: StdioServerParameters | None = None,
+) -> dict[str, Any]:
+    """Generate diagnosis report synchronously."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Create new event loop in a thread
+            import concurrent.futures
+
+            def run_in_new_loop():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    return new_loop.run_until_complete(
+                        generate_diagnosis_report_async(data, template_id, server_params)
+                    )
+                finally:
+                    new_loop.close()
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_new_loop)
+                return future.result(timeout=120)
+        else:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(
+                    generate_diagnosis_report_async(data, template_id, server_params)
+                )
+            finally:
+                loop.close()
+    except RuntimeError:
+        # No event loop, create new one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(
+                generate_diagnosis_report_async(data, template_id, server_params)
+            )
+        finally:
+            loop.close()

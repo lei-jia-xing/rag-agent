@@ -7,36 +7,39 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
-    
+
     # MCP servers use stdio, but adding port for debugging/monitoring
     # ports:
     #   - "8000:8000"
-    
+
     environment:
       - MCP_PROJECT_ROOT=/workspace
       - PYTHONPATH=/workspace
       - DOCUMENT_OUTPUT_DIR=documents
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    
+
+    user: "1000:1000"
     volumes:
-      # Output directories
-      - ./documents:/workspace/documents
-      - ./logs:/workspace/logs
-      # Source code for hot reloading
-      - ./mcp_latex_tool.py:/workspace/mcp_latex_tool.py
-      - ./run_server.py:/workspace/run_server.py
-      
+      # Mount entire source directory for hot reloading
+      - .:/workspace:Z
+
       # Cache directories for faster LaTeX compilation
       - latex-cache:/home/mcp/.cache/latex
       - texmf-cache:/home/mcp/.texmf-var
-    
+
     healthcheck:
-      test: ["CMD", "sh", "-c", "python3 -c 'import mcp; print(\"OK\")' && pdflatex --version > /dev/null"]
+      test:
+        [
+          "CMD",
+          "sh",
+          "-c",
+          'python3 -c ''import mcp; print("OK")'' && pdflatex --version > /dev/null',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    
+
     logging:
       driver: "json-file"
       options:

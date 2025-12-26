@@ -1,8 +1,3 @@
-"""报告生成应用
-
-专注于技术报告生成的 RAG 应用。
-"""
-
 import re
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +9,6 @@ from rich.console import Console
 from rag_agent.apps.base import AppConfig, BaseApp
 from rag_agent.pdf_generator import generate_report_pdf
 from rag_agent.rag_engine import RAGEngine
-from rag_agent.mcp import TemplateEngine
 
 console = Console()
 
@@ -151,7 +145,7 @@ class ReportApp(BaseApp):
         documents: list[Document],
         output_path: str | Path | None = None,
     ) -> str:
-        """生成 LaTeX 报告并使用 MCP 服务编译为 PDF
+        """生成 LaTeX 报告并使用 MCP 服务编译
 
         Args:
             query: 报告主题
@@ -159,74 +153,41 @@ class ReportApp(BaseApp):
             output_path: 输出路径，如果为 None 则自动生成
 
         Returns:
-            生成的 PDF 文件路径或 LaTeX 内容（如果编译失败）
+            生成的 PDF 文件路径或 LaTeX 内容
         """
-        import re
         import time
-        from datetime import datetime
-        from pathlib import Path
 
+        # 使用旧的 LaTeX 生成方式（保留向后兼容）
+        console.print("[cyan]正在生成 LaTeX 报告...[/cyan]")
+
+        start_time = time.time()
         try:
-            # Stage 2: 生成 LaTeX 内容
-            console.print("\n[cyan][2/4] 生成报告内容...[/cyan]")
-            start_time = time.time()
-            latex_content = self.engine.generate_latex_content(query, documents)
+            # 调用 LLM 生成 LaTeX
+            full_latex = self.engine.generate_latex_content(query, documents)
             elapsed = time.time() - start_time
-            console.print(f"[green]  ✓ 内容生成完成 ({elapsed:.1f}s)[/green]")
-
-            # 读取模板文件
-            template_path = Path(__file__).parent.parent / "mcp" / "templates" / "default.tex"
-            if not template_path.exists():
-                console.print(f"[yellow]模板文件不存在: {template_path}[/yellow]")
-                console.print("[yellow]使用最小模板[/yellow]")
-                template = r"""\documentclass[11pt,a4paper]{article}
-\usepackage[margin=1in]{geometry}
-\usepackage{ctex}
-
-\title{技术报告: {{title}}}
-\author{RAG Agent \\ \texttt{生成时间: \today}}
-\date{}
-
-\begin{document}
-\maketitle
-
-{{content}}
-
-\end{document}"""
-            else:
-                with open(template_path, encoding="utf-8") as f:
-                    template = f.read()
-
-            # 替换占位符
-            full_latex = template.replace("{{title}}", query)
-            full_latex = full_latex.replace("{{content}}", latex_content)
+            console.print(f"[green]  ✓ LaTeX 内容生成完成 ({elapsed:.1f}s)[/green]")
 
             # 生成输出路径
             if output_path is None:
+                reports_dir = Path("reports")
+                reports_dir.mkdir(exist_ok=True)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 safe_title = re.sub(r"[^\w\s-]", "", query)[:20].strip()
                 safe_title = re.sub(r"[-\s]+", "_", safe_title)
-                output_path = Path(f"report_latex_{safe_title}_{timestamp}.pdf")
+                output_path = reports_dir / f"latex_{safe_title}_{timestamp}.pdf"
             else:
                 output_path = Path(output_path)
 
-            # Stage 3: 编译 LaTeX 文档
-            console.print("\n[cyan][3/4] 编译LaTeX文档...[/cyan]")
+            # 编译 LaTeX
+            console.print("[cyan]正在编译 LaTeX 文档...[/cyan]")
             start_time = time.time()
             from rag_agent.mcp.latex_client import compile_latex
-
-            result = compile_latex(
-                content=full_latex,
-                format="pdf",
-                template="custom",  # 使用custom模板，因为内容已经是完整文档
-            )
+            result = compile_latex(content=full_latex, format="pdf", template="custom")
             elapsed = time.time() - start_time
 
             if result.get("success"):
                 console.print(f"[green]  ✓ LaTeX编译成功 ({elapsed:.1f}s)[/green]")
-
-                # Stage 4: 保存 PDF 文件
-                console.print("\n[cyan][4/4] 保存PDF文件...[/cyan]")
+                console.print("[cyan]正在保存 PDF 文件...[/cyan]")
                 start_time = time.time()
                 import shutil
 
@@ -238,20 +199,11 @@ class ReportApp(BaseApp):
             else:
                 error_msg = result.get("error", "未知错误")
                 console.print(f"[red]LaTeX 编译失败: {error_msg}[/red]")
-
-                # 显示调试文件路径
-                if result.get("failed_tex_path"):
-                    console.print(f"[yellow]调试: 失败的.tex文件已保存到: {result['failed_tex_path']}[/yellow]")
-                if result.get("failed_log_path"):
-                    console.print(f"[yellow]调试: 编译日志已保存到: {result['failed_log_path']}[/yellow]")
-
-                # 返回 LaTeX 内容作为备选
                 console.print("[yellow]返回 LaTeX 格式报告[/yellow]")
                 return full_latex
 
         except Exception as e:
             console.print(f"[red]生成 LaTeX 报告失败: {e}[/red]")
-            # 返回错误信息
             return f"生成 LaTeX 报告失败: {e}"
 
     def _generate_diagnosis_report(
@@ -260,7 +212,7 @@ class ReportApp(BaseApp):
         documents: list[Document],
         output_path: str | Path | None = None,
     ) -> str:
-        """生成设备健康诊断报告（使用专业模板+LLM填空）
+        """生成设备健康诊断报告（使用 LaTeX MCP 内置模板）
 
         Args:
             device_name: 设备名称
@@ -276,66 +228,69 @@ class ReportApp(BaseApp):
 
         try:
             # Stage 2: 生成诊断字段数据
-            console.print("\n[cyan][2/4] 生成诊断字段数据...[/cyan]")
+            console.print("\n[cyan][2/3] 生成诊断字段数据...[/cyan]")
             start_time = time.time()
             diagnosis_data = self.engine.generate_diagnosis_fields(device_name, documents)
             elapsed = time.time() - start_time
             console.print(f"[green]  ✓ 字段数据生成完成 ({elapsed:.1f}s)[/green]")
-            # 加载模板引擎
-            template_path = Path(__file__).parent.parent / "mcp" / "templates" / "device_diagnosis.tex"
-            # 使用模块级导入的 TemplateEngine
-            if not template_path.exists():
-                console.print(f"[yellow]模板文件不存在: {template_path}[/yellow]")
-                raise FileNotFoundError(f"模板文件不存在: {template_path}")
-            engine = TemplateEngine(template_path)
-            # 渲染 LaTeX 文档
-            full_latex = engine.render(diagnosis_data)
-            # 生成输出路径
+
+            # Stage 3: 使用 LaTeX MCP 生成报告
+            console.print("\n[cyan][3/3] 使用 LaTeX MCP 生成报告...[/cyan]")
+            start_time = time.time()
+
+            from rag_agent.mcp.latex_client import generate_diagnosis_report
+
+            result = generate_diagnosis_report(
+                data=diagnosis_data,
+                template_id="device_diagnosis",
+            )
+            elapsed = time.time() - start_time
+
+            if not result.get("success"):
+                error_msg = result.get("error", "未知错误")
+                console.print(f"[red]报告生成失败: {error_msg}[/red]")
+                return f"生成失败: {error_msg}"
+
+            console.print(f"[green]  ✓ 报告生成成功 ({elapsed:.1f}s)[/green]")
+
+            # 复制 PDF 到指定路径
             if output_path is None:
+                reports_dir = Path("reports")
+                reports_dir.mkdir(exist_ok=True)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 safe_name = re.sub(r"[^\w\s-]", "", device_name)[:20].strip()
                 safe_name = re.sub(r"[-\s]+", "_", safe_name)
-                output_path = Path(f"diagnosis_{safe_name}_{timestamp}.pdf")
+                output_path = reports_dir / f"diagnosis_{safe_name}_{timestamp}.pdf"
             else:
                 output_path = Path(output_path)
-            # Stage 3: 编译 LaTeX 文档
-            console.print("\n[cyan][3/4] 编译LaTeX文档...[/cyan]")
-            start_time = time.time()
-            from rag_agent.mcp.latex_client import compile_latex
-            result = compile_latex(content=full_latex, format="pdf", template="custom")
-            elapsed = time.time() - start_time
-            if result.get("success"):
-                console.print(f"[green]  ✓ LaTeX编译成功 ({elapsed:.1f}s)[/green]")
-                # Stage 4: 保存 PDF 文件
-                console.print("\n[cyan][4/4] 保存PDF文件...[/cyan]")
-                start_time = time.time()
-                import shutil
-                source_path = Path(result["output_path"])
-                shutil.copy(source_path, output_path)
-                elapsed = time.time() - start_time
-                console.print(f"[green]  ✓ PDF文件已保存 ({elapsed:.2f}s)[/green]")
+
+            import shutil
+            source = Path(result["output_path"]) if result.get("output_path") else None
+            if source and source.exists():
+                shutil.copy(source, output_path)
+                console.print(f"[green]  ✓ PDF 文件已保存: {output_path}[/green]")
                 return str(output_path)
             else:
-                error_msg = result.get("error", "未知错误")
-                console.print(f"[red]LaTeX 编译失败: {error_msg}[/red]")
-                console.print("[yellow]返回 LaTeX 格式报告[/yellow]")
-                return full_latex
+                console.print("[yellow]PDF 文件不存在[/yellow]")
+                return "生成失败"
+
         except Exception as e:
             console.print(f"[red]生成诊断报告失败: {e}[/red]")
-            return f"生成诊断报告失败: {e}"
+            return f"生成失败: {e}"
+
 
 
 def get_context(self, query: str, k: int = 5) -> list[Document]:
-        """获取相关上下文
+    """获取相关上下文
 
-        Args:
-            query: 查询
-            k: 返回文档数（报告默认更多）
+    Args:
+        query: 查询
+        k: 返回文档数（报告默认更多）
 
-        Returns:
-            相关文档列表
-        """
-        if not self._initialized:
-            self.initialize()
+    Returns:
+        相关文档列表
+    """
+    if not self._initialized:
+        self.initialize()
 
-        return self.engine.retrieve(query, k=k)
+    return self.engine.retrieve(query, k=k)

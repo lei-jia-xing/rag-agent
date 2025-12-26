@@ -1,0 +1,203 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=2.5cm,top=3cm,bottom=2.5cm]{geometry}
+\usepackage{ctex}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+\usepackage{lastpage}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{tcolorbox}
+\usepackage{tikz}
+
+% 页面设置
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small [[report_id]]}
+\fancyhead[R]{\small [[diagnosis_date]]}
+\fancyfoot[C]{\small 第\thepage\ 页 / 共\pageref{LastPage} 页}
+
+% 标题格式
+\titleformat{\section}{\Large\bfseries\color{blue!70!black}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{teal}}{\thesubsection}{1em}{}
+\titlespacing*{\section}{0pt}{12pt}{8pt}
+\titlespacing*{\subsection}{0pt}{8pt}{6pt}
+
+% 颜色定义
+\definecolor{statusgreen}{RGB}{76,175,80}
+\definecolor{statusyellow}{RGB}{255,193,7}
+\definecolor{statusred}{RGB}{244,67,54}
+\definecolor{headergray}{RGB}{66,66,66}
+\definecolor{lightblue}{RGB}{235,245,255}
+
+\begin{document}
+
+% ============= 封面 =============
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+
+  {\Huge\bfseries\color{blue!70!black} 设备健康诊断报告}\par
+  \vspace{0.5cm}
+  {\Large [[title]]}\par
+
+  \vspace{2cm}
+
+  \begin{tabularx}{0.9\textwidth}{@{}lXl@{}}
+    \toprule
+    \textbf{报告编号} & [[report_id]] & \\
+    \midrule
+    \textbf{设备名称} & [[device_name]] & \\
+    \textbf{设备型号} & [[device_model]] & \\
+    \textbf{安装位置} & [[location]] & \\
+    \textbf{诊断日期} & [[diagnosis_date]] & \\
+    \textbf{数据范围} & [[data_range]] & \\
+    \bottomrule
+  \end{tabularx}
+
+  \vspace{2cm}
+
+  % 健康评分展示
+  \begin{tikzpicture}
+    \draw[fill=gray!10, draw=gray!50] (0,0) circle (2.5cm);
+    \node at (0,0.3) {\huge\bfseries [[health_score]]};
+    \node at (0,-0.5) {\large \textbf{[[health_status]]}};
+    \node at (0,-1.2) {\small 风险等级：\textbf{[[risk_level]]}};
+  \end{tikzpicture}
+
+  \vspace{1.5cm}
+  \small{本报告基于设备监测数据和现场诊断结果生成}
+
+  \vfill
+\end{titlepage}
+
+% ============= 1. 执行摘要 =============
+\section{执行摘要}
+\subsection{诊断概要}
+[[abstract]]
+
+% ============= 2. 设备基本信息 =============
+\section{设备基本信息}
+
+\begin{table}[H]
+\centering
+\caption{设备基本信息}
+\begin{tabularx}{0.95\textwidth}{@{}lX@{}}
+\toprule
+\textbf{项目} & \textbf{详情} \\
+\midrule
+设备名称 & [[device_name]] \\
+设备型号 & [[device_model]] \\
+安装位置 & [[location]] \\
+诊断日期 & [[diagnosis_date]] \\
+数据采集范围 & [[data_range]] \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{设备技术参数}
+[[technical_parameters]]
+
+\subsection{运行环境}
+[[operating_environment]]
+
+\subsection{历史维护记录}
+[[maintenance_history]]
+
+% ============= 3. 健康状态评估 =============
+\section{健康状态评估}
+
+\begin{table}[H]
+\centering
+\caption{健康状态总览}
+\begin{tabularx}{0.95\textwidth}{@{}llcc@{}}
+\toprule
+\textbf{评估项目} & \textbf{说明} & \textbf{结果} & \textbf{状态} \\
+\midrule
+整体健康评分 & 0-100分，分数越高越健康 & \textbf{[[health_score]]分} &
+\textbf{[[health_status]]} \\
+风险等级 & 低/中/高三个等级 & \textbf{[[risk_level]]} &
+\textbf{[[health_status]]} \\
+发现问题数 & 当前检测到的主要问题数量 & \textbf{[[issue_count]]}个 & \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ============= 4. 监测数据分析 =============
+\section{监测数据分析}
+
+\subsection{监测数据汇总}
+[[monitoring_data_summary]]
+
+\subsection{关键指标分析}
+[[key_metrics_analysis]]
+
+\subsection{趋势分析}
+[[trend_analysis]]
+
+\subsection{异常检测}
+[[anomaly_detection]]
+
+% ============= 5. 故障诊断详情 =============
+\section{故障诊断详情}
+
+\subsection{故障现象描述}
+[[fault_description]]
+
+\subsection{故障原因分析}
+[[fault_cause_analysis]]
+
+\subsection{故障定位}
+[[fault_location]]
+
+% ============= 6. 风险评估 =============
+\section{风险评估}
+
+\subsection{当前风险}
+[[current_risks]]
+
+\subsection{潜在风险}
+[[potential_risks]]
+
+\subsection{风险控制建议}
+[[risk_control]]
+
+% ============= 7. 维护建议 =============
+\section{维护建议}
+
+\subsection{紧急处理措施}
+\begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=\textbf{紧急措施}]
+[[urgent_measures]]
+\end{tcolorbox}
+
+\subsection{维护计划}
+[[maintenance_plan]]
+
+\subsection{备件建议}
+[[spare_parts_suggestion]]
+
+% ============= 8. 诊断方法与标准 =============
+\section{诊断方法与标准}
+
+\subsection{诊断方法说明}
+[[diagnosis_method]]
+
+\subsection{相关标准}
+[[related_standards]]
+
+% ============= 9. 结论与建议 =============
+\section{结论与建议}
+[[conclusion_and_recommendations]]
+
+\end{document}

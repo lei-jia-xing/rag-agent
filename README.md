@@ -14,30 +14,6 @@
 
 ---
 
-## 系统架构
-
-### 整体架构
-
-<div align="center">
-  <img src="./Archtecture.png" alt="RAG Agent 系统架构图" width="100%">
-</div>
-
-### 模块化设计
-
-```
-rag_agent/
-├── __init__.py          # 主入口
-├── cli.py               # CLI 交互层（Typer + prompt_toolkit）
-├── config.py            # 配置管理
-├── data_loader.py       # 数据集加载
-├── rag_engine.py        # RAG 核心引擎（检索 + 生成）
-└── apps/                # 应用层
-    ├── base.py          # 基础应用抽象类
-    ├── qa_app.py        # 问答应用
-    └── report_app.py    # 报告生成应用
-```
-
-
 ## 快速开始
 
 ### 1. 安装依赖
@@ -45,7 +21,6 @@ rag_agent/
 ```bash
 uv sync
 ```
-
 
 ### 2. 配置 API
 
@@ -81,6 +56,96 @@ uv run rag-agent build
 uv run rag-agent
 ```
 
+---
+
+## 🎨 LaTeX 报告生成
+
+**内置专业模板，支持一键生成设备诊断报告**
+
+本项目集成了 LaTeX MCP 服务，支持专业报告生成。
+
+### 功能特性
+
+- **模板内置**：模板直接集成在 LaTeX MCP 中，无需额外服务
+- **简单调用**：单次 MCP 调用完成渲染和编译
+- **JSON Schema验证**：确保字段数据符合模板要求
+- **Jinja2渲染**：支持复杂的模板逻辑和条件判断
+- **专业模板**：内置设备健康诊断报告（32个字段，9大章节）
+
+### 内置模板
+
+#### 设备健康诊断报告 (device_diagnosis)
+
+专业详细技术报告风格的设备诊断模板：
+
+```
+封面页
+  ├── 报告标题、编号、日期
+  ├── 设备信息表格
+  └── 健康评分可视化（TikZ圆形仪表盘）
+
+执行摘要
+  └── 诊断概要
+
+设备基本信息
+  ├── 技术参数
+  ├── 运行环境
+  └── 历史维护记录
+
+健康状态评估
+  └── 健康评分表格（动态颜色）
+
+监测数据分析
+  ├── 数据汇总
+  ├── 关键指标分析
+  ├── 趋势分析
+  └── 异常检测
+
+故障诊断详情
+  ├── 故障现象
+  ├── 原因分析
+  └── 故障定位
+
+风险评估
+  ├── 当前风险
+  ├── 潜在风险
+  └── 风险控制建议
+
+维护建议
+  ├── 紧急处理措施（高亮框）
+  ├── 维护计划
+  └── 备件建议
+
+诊断方法与标准
+  └── 相关标准引用
+
+结论与建议
+```
+
+### 使用示例
+
+```python
+from rag_agent.mcp.latex_client import generate_diagnosis_report
+
+# 生成设备诊断报告
+result = generate_diagnosis_report(
+    data={
+        "title": "设备健康诊断报告",
+        "device_name": "变压器",
+        "health_score": 85,
+        "health_status": "正常",
+        "risk_level": "低",
+        # ... 其他28个字段
+    },
+    template_id="device_diagnosis"
+)
+
+if result["success"]:
+    print(f"报告已生成: {result['output_path']}")
+```
+
+---
+
 ## 🛠️ 技术栈
 
 | 组件 | 技术 | 用途 |
@@ -93,27 +158,37 @@ uv run rag-agent
 | **CLI** | prompt_toolkit + Rich | 交互式命令行界面 |
 | **包管理** | uv | 快速依赖管理 |
 | **代码质量** | Ruff + Pyright | 代码检查与类型检查 |
+| **MCP模板** | Jinja2 + JSON Schema | 模板填充服务 |
+
+---
 
 ## 🔧 开发指南
 
 ### 项目结构
 
 ```
-rag-agent/
+rag_agent/
 ├── rag_agent/              # 主包
 │   ├── __init__.py         # 入口点
 │   ├── cli.py              # CLI（Typer + prompt_toolkit）
 │   ├── config.py           # 配置管理
 │   ├── data_loader.py      # 数据集加载
 │   ├── rag_engine.py       # RAG 核心引擎
+│   ├── mcp/                # MCP 客户端
+│   │   └── latex_client.py # LaTeX MCP 客户端
 │   └── apps/               # 应用层
 │       ├── base.py         # 基础应用抽象类
 │       ├── qa_app.py       # 问答应用
 │       └── report_app.py   # 报告生成应用
+├── mcp-latex/              # LaTeX MCP 服务（含内置模板）
+│   ├── templates/          # 报告模板
+│   │   └── device_diagnosis/
+│   ├── mcp_latex_tool.py   # MCP 服务器
+│   ├── template_manager.py # Jinja2 模板管理器
+│   └── Dockerfile          # 容器化部署
 ├── pyproject.toml          # 项目配置
 ├── .env.example            # 环境变量模板
 └── README.md               # 文档
-
 ```
 
 ### 代码质量检查
@@ -128,6 +203,8 @@ uv run ruff check .
 # 类型检查
 uv run pyright
 ```
+
+---
 
 ## ⚙️ 配置选项
 
@@ -145,10 +222,21 @@ DATASET_NAME=natural_questions        # Google 自然问题
 DATASET_NAME=cmrc2018                 # 中文阅读理解
 ```
 
+---
+
 ## 📋 TODO
 
+- [x] 创建 LaTeX MCP 服务（内置模板）
+- [x] 实现设备健康诊断报告模板（32字段，9章节）
+- [x] 集成到 report_app.py
 - [ ] 评估当前检索效果，建立基准线
 - [ ] 尝试更好的中文 Embedding 模型（bge-large-zh、m3e-large）
 - [ ] 实现混合检索（BM25 + 向量）
 - [ ] 添加 Reranker 重排序
 - [ ] 扩充高质量数据集
+
+---
+
+## 许可证
+
+MIT License

@@ -8,11 +8,8 @@ asyncio
 # MCP server dependencies
 pydantic>=2.0.0
 
+# Template engine
+jinja2>=3.1.0
+
 # Optional: For better error handling and logging
 python-dotenv>=1.0.0
-
-# Note: LaTeX compilation is handled by system packages in Docker
-# The following system packages are required (installed via apt in Dockerfile):
-# - texlive-full (or texlive-latex-base for minimal)
-# - pdftoppm (for PDF to PNG conversion)
-# - pdf2svg (for PDF to SVG conversion)

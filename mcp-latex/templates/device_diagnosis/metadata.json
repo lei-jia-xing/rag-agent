@@ -1,0 +1,28 @@
+{
+  "id": "device_diagnosis",
+  "name": "设备健康诊断报告",
+  "description": "专业详细技术报告风格的设备健康诊断模板，包含封面、执行摘要、设备信息、健康评分仪表盘、监测数据分析、故障诊断详情、风险评估、维护建议、诊断方法与标准、结论与建议等9大章节",
+  "version": "2.0.0",
+  "category": "device_health",
+  "language": "zh-CN",
+  "author": "RAG Agent Team",
+  "tags": ["诊断", "设备", "工程", "健康评估", "故障分析", "技术报告"],
+  "required_fields": [
+    "title",
+    "report_id",
+    "device_name",
+    "device_model",
+    "location",
+    "diagnosis_date",
+    "data_range",
+    "health_score",
+    "health_status",
+    "risk_level",
+    "abstract",
+    "conclusion_and_recommendations"
+  ],
+  "created_at": "2025-01-26T00:00:00Z",
+  "updated_at": "2025-12-26T06:00:00Z",
+  "usage_hint": "AI填充时，请按照设备实际情况填写各字段。health_score为0-100的整数，health_status和risk_level需要从枚举值中选择。模板使用LaTeX高级功能生成专业工业风格报告。",
+  "example_output": "生成一份包含封面页、健康评分可视化图表、数据表格、故障分析章节、风险评估、维护计划等完整内容的专业PDF技术报告。"
+}

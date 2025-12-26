@@ -31,4 +31,8 @@ wheels/
 .vectorstore/
 .cache/
 
+# Generated reports
+reports/
+*.pdf
+
 .rag_history
