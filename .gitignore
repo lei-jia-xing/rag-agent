@@ -36,3 +36,5 @@ reports/
 *.pdf
 
 .rag_history
+
+article/
