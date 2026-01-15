@@ -3,7 +3,7 @@
 定义智能体的状态结构，用于在节点之间传递数据。
 """
 
-from typing import Annotated, TypedDict
+from typing import Annotated, NotRequired, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
@@ -43,17 +43,30 @@ class AgentState(TypedDict):
 
 
 class DiagnosisState(TypedDict):
-    """诊断智能体状态
+    """诊断智能体状态 - 支持多阶段诊断流程"""
 
-    专门用于设备诊断流程的状态。
-    """
+    query: str
+    device_name: str
+    documents: list[Document]
 
-    query: str  # 设备名称或问题描述
-    device_name: str  # 设备名称
-    documents: list[Document]  # 检索到的文档
-    diagnosis_data: dict  # 诊断字段数据
-    report_path: str  # 生成的报告路径
-    analysis_result: str  # 分析结果
+    # Stage 1: 核心评估
+    core_assessment: NotRequired[dict]
+
+    # Stage 2: 详细分析
+    analysis_result: NotRequired[str]
+    fault_analysis: NotRequired[dict]
+    risk_analysis: NotRequired[dict]
+
+    # Stage 3: 字段生成
+    device_info_fields: NotRequired[dict]
+    monitoring_fields: NotRequired[dict]
+    maintenance_fields: NotRequired[dict]
+
+    # Stage 4: 最终输出
+    diagnosis_data: NotRequired[dict]
+    validation_issues: NotRequired[list[str]]
+    report_path: NotRequired[str]
+
     messages: Annotated[list[BaseMessage], add_messages]
 
 
