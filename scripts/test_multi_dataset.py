@@ -11,8 +11,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from rag_agent.multi_dataset_loader import MultiDatasetLoader
-from rich.console import Console
+from rich.console import Console  # noqa: E402
+
+from rag_agent.multi_dataset_loader import MultiDatasetLoader  # noqa: E402
 
 console = Console()
 
@@ -86,7 +87,7 @@ def test_combined_datasets():
         load_all=False,
     )
 
-    datasets = loader.load_all_datasets()
+    loader.load_all_datasets()
     combined = loader.get_combined_documents()
 
     console.print(f"[green]✓ 合并后总计: {len(combined)} 条数据[/green]\n")

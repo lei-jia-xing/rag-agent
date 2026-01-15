@@ -7,12 +7,11 @@
     python scripts/download_datasets.py --dataset all
 """
 
-import asyncio
 import sys
 from pathlib import Path
 
 import typer
-from datasets import load_dataset
+from datasets import Dataset, DatasetDict, load_dataset
 from rich.console import Console
 from rich.table import Table
 
@@ -43,7 +42,9 @@ def list_datasets():
         table.add_row(name, lang, size, priority)
 
     console.print(table)
-    console.print("\n[yellow]提示:[/yellow] 使用 [green]python scripts/download_datasets.py --dataset <name>[/green] 下载数据集")
+    console.print(
+        "\n[yellow]提示:[/yellow] 使用 [green]python scripts/download_datasets.py --dataset <name>[/green] 下载数据集"
+    )
 
 
 @app.command()
@@ -79,16 +80,22 @@ def download_baa_corpus(output_path: Path):
     try:
         dataset = load_dataset("BAAI/IndustryCorpus2_electric_power_energy")
 
-        console.print(f"[green]✓ 数据集加载成功[/green]")
-        console.print(f"  - Split: {list(dataset.keys())}")
+        console.print("[green]✓ 数据集加载成功[/green]")
 
-        # 保存到文件
-        if "train" in dataset:
+        if isinstance(dataset, DatasetDict):
+            console.print(f"  - Split: {list(dataset.keys())}")
+            if "train" in dataset:
+                train_path = output_path / "baa_electrical_train.jsonl"
+                dataset["train"].to_json(train_path)
+                console.print(f"  - 训练集保存到: {train_path}")
+        elif isinstance(dataset, Dataset):
             train_path = output_path / "baa_electrical_train.jsonl"
-            dataset["train"].to_json(train_path)
-            console.print(f"  - 训练集保存到: {train_path}")
+            dataset.to_json(train_path)
+            console.print(f"  - 数据集保存到: {train_path}")
+        else:
+            console.print("[yellow]⚠ 不支持的数据集类型，跳过保存[/yellow]")
 
-        console.print(f"\n[bold green]✓ BAAI工业语料库下载完成[/bold green]")
+        console.print("[bold green]✓ BAAI工业语料库下载完成[/bold green]")
 
     except Exception as e:
         console.print(f"[red]✗ 下载失败: {e}[/red]")
@@ -109,10 +116,7 @@ def download_etdataset(output_path: Path):
 
         console.print(f"[dim]克隆仓库: {repo_url}[/dim]")
 
-        subprocess.run(
-            ["git", "clone", repo_url, str(clone_path)],
-            check=True
-        )
+        subprocess.run(["git", "clone", repo_url, str(clone_path)], check=True)
 
         console.print(f"[green]✓ ETDataset下载完成: {clone_path}[/green]")
 
