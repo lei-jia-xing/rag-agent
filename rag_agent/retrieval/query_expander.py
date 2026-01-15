@@ -82,8 +82,7 @@ class QueryExpander:
                 ),
                 (
                     "human",
-                    "原始查询：{query}\n\n"
-                    "重写后的查询：",
+                    "原始查询：{query}\n\n重写后的查询：",
                 ),
             ]
         )
@@ -91,7 +90,8 @@ class QueryExpander:
         try:
             chain = rewrite_prompt | self.llm
             response = await chain.ainvoke({"query": query})
-            rewritten = response.content.strip()
+            content = response.content
+            rewritten = str(content).strip() if content else query
 
             logger.info(f"查询重写: '{query}' -> '{rewritten}'")
             return rewritten
@@ -146,31 +146,24 @@ class QueryExpander:
                 ),
                 (
                     "human",
-                    "原始查询：{query}\n\n"
-                    "生成{num_queries}个查询变体：",
+                    "原始查询：{query}\n\n生成{num_queries}个查询变体：",
                 ),
             ]
         )
 
         try:
             chain = multi_query_prompt | self.llm
-            response = await chain.ainvoke(
-                {"query": query, "num_queries": num_queries}
-            )
+            response = await chain.ainvoke({"query": query, "num_queries": num_queries})
 
-            # 解析生成的查询
-            queries_text = response.content.strip()
-            generated_queries = [
-                line.strip() for line in queries_text.split("\n") if line.strip()
-            ]
+            content = response.content
+            queries_text = str(content).strip() if content else ""
+            generated_queries = [line.strip() for line in queries_text.split("\n") if line.strip()]
 
             # 确保至少返回原始查询
             all_queries = [query] + generated_queries
             unique_queries = list(dict.fromkeys(all_queries))  # 去重并保持顺序
 
-            logger.info(
-                f"多查询生成: 原始='{query}', 生成{len(unique_queries)}个查询"
-            )
+            logger.info(f"多查询生成: 原始='{query}', 生成{len(unique_queries)}个查询")
             return unique_queries[:num_queries]
 
         except Exception as e:
@@ -220,8 +213,7 @@ class QueryExpander:
                 ),
                 (
                     "human",
-                    "问题：{query}\n\n"
-                    "请生成一个详细的答案：",
+                    "问题：{query}\n\n请生成一个详细的答案：",
                 ),
             ]
         )
@@ -229,11 +221,10 @@ class QueryExpander:
         try:
             chain = hyde_prompt | self.llm
             response = await chain.ainvoke({"query": query})
-            hypothetical_doc = response.content.strip()
+            content = response.content
+            hypothetical_doc = str(content).strip() if content else query
 
-            logger.info(
-                f"HyDE生成: 查询='{query}', 文档长度={len(hypothetical_doc)}"
-            )
+            logger.info(f"HyDE生成: 查询='{query}', 文档长度={len(hypothetical_doc)}")
             return hypothetical_doc
 
         except Exception as e:
@@ -291,9 +282,7 @@ class QueryExpander:
 
         # 3. HyDE生成
         if enable_hyde:
-            result["hypothetical_document"] = await self.generate_hypothetical_document(
-                query
-            )
+            result["hypothetical_document"] = await self.generate_hypothetical_document(query)
 
         return result
 

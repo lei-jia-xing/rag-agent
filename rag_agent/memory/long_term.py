@@ -32,9 +32,7 @@ class LongTermMemory:
         if not self.engine.vectorstore:
             self.engine.initialize(load_only=True)
 
-    async def store_memory(
-        self, content: str, metadata: dict[str, Any] | None = None
-    ) -> str:
+    async def store_memory(self, content: str, metadata: dict[str, Any] | None = None) -> str:
         """存储记忆到向量数据库
 
         Args:
@@ -56,10 +54,12 @@ class LongTermMemory:
             if metadata is None:
                 metadata = {}
 
-            metadata.update({
-                "timestamp": datetime.now().isoformat(),
-                "memory_type": metadata.get("type", "general"),
-            })
+            metadata.update(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "memory_type": metadata.get("type", "general"),
+                }
+            )
 
             # 创建文档
             doc = Document(page_content=content, metadata=metadata)
@@ -105,9 +105,7 @@ class LongTermMemory:
             # 执行相似度搜索
             if filter_metadata:
                 # 如果有过滤条件，使用向量数据库的过滤功能
-                memories = self.engine.vectorstore.similarity_search(
-                    query, k=k, filter=filter_metadata
-                )
+                memories = self.engine.vectorstore.similarity_search(query, k=k, filter=filter_metadata)
             else:
                 memories = self.engine.vectorstore.similarity_search(query, k=k)
 
@@ -118,9 +116,7 @@ class LongTermMemory:
             logger.error(f"检索记忆失败: {e}", exc_info=True)
             return []
 
-    async def search_by_metadata(
-        self, metadata_filter: dict[str, Any], k: int = 10
-    ) -> list[Document]:
+    async def search_by_metadata(self, metadata_filter: dict[str, Any], k: int = 10) -> list[Document]:
         """根据元数据搜索记忆
 
         Args:
@@ -141,9 +137,7 @@ class LongTermMemory:
                 return []
 
             # 使用向量数据库的相似度搜索（带空查询）
-            memories = self.engine.vectorstore.similarity_search(
-                "", k=k, filter=metadata_filter
-            )
+            memories = self.engine.vectorstore.similarity_search("", k=k, filter=metadata_filter)
 
             return memories
 
@@ -208,12 +202,10 @@ if __name__ == "__main__":
         # 存储记忆
         console.print("[yellow]存储记忆...[/yellow]")
         await memory.store_memory(
-            "变压器油温应控制在85℃以下，绕组温度不超过95℃",
-            {"type": "standard", "device": "变压器"}
+            "变压器油温应控制在85℃以下，绕组温度不超过95℃", {"type": "standard", "device": "变压器"}
         )
         await memory.store_memory(
-            "变压器常见故障包括绕组短路、铁芯多点接地等",
-            {"type": "knowledge", "device": "变压器"}
+            "变压器常见故障包括绕组短路、铁芯多点接地等", {"type": "knowledge", "device": "变压器"}
         )
         console.print("✓ 存储了 2 条记忆\n")
 

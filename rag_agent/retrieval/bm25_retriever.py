@@ -51,6 +51,7 @@ class BM25Retriever(BaseRetriever):
 
     class Config:
         """Pydantic配置"""
+
         arbitrary_types_allowed = True
 
     def __init__(
@@ -73,12 +74,11 @@ class BM25Retriever(BaseRetriever):
             >>> retriever = BM25Retriever(documents, k1=1.5, b=0.75)
             >>> results = retriever.invoke("变压器温度")
         """
-        super().__init__(
-            documents=documents,
-            k1=k1,
-            b=b,
-            top_k=top_k,
-        )
+        super().__init__()
+        self.documents = documents
+        self.k1 = k1
+        self.b = b
+        self.top_k = top_k
         self._build_index()
 
     def _build_index(self) -> None:
@@ -110,11 +110,7 @@ class BM25Retriever(BaseRetriever):
         doc_lengths = [len(doc) for doc in self._corpus]
         self._avgdl = sum(doc_lengths) / len(doc_lengths) if doc_lengths else 0
 
-        logger.info(
-            f"BM25索引构建完成: "
-            f"词汇量={len(self._idf)}, "
-            f"平均文档长度={self._avgdl:.1f}"
-        )
+        logger.info(f"BM25索引构建完成: 词汇量={len(self._idf)}, 平均文档长度={self._avgdl:.1f}")
 
     def _calculate_idf(self, corpus: list[list[str]]) -> dict[str, float]:
         """计算IDF（逆文档频率）
@@ -172,9 +168,7 @@ class BM25Retriever(BaseRetriever):
 
                 # BM25分数
                 numerator = f * (self.k1 + 1)
-                denominator = f + self.k1 * (
-                    1 - self.b + self.b * doc_len / self._avgdl
-                )
+                denominator = f + self.k1 * (1 - self.b + self.b * doc_len / self._avgdl)
                 score += idf * (numerator / denominator)
 
             scores.append(score)
@@ -208,17 +202,14 @@ class BM25Retriever(BaseRetriever):
         results = [self.documents[doc_id] for score, doc_id in top_docs if score > 0]
 
         max_score = top_docs[0][0] if top_docs else 0.0
-        logger.info(
-            f"BM25检索: query='{query}', "
-            f"返回{len(results)}个文档, "
-            f"最高分={max_score:.2f}"
-        )
+        logger.info(f"BM25检索: query='{query}', 返回{len(results)}个文档, 最高分={max_score:.2f}")
 
         return results
 
 
 # 测试代码
 if __name__ == "__main__":
+
     def test_bm25_retriever():
         """测试BM25检索器"""
         from rich.console import Console

@@ -43,6 +43,7 @@ class HybridRetriever(BaseRetriever):
 
     class Config:
         """Pydantic配置"""
+
         arbitrary_types_allowed = True
 
     def __init__(
@@ -69,13 +70,12 @@ class HybridRetriever(BaseRetriever):
             >>> hybrid = HybridRetriever(engine, bm25, alpha=0.5)
             >>> results = hybrid.invoke("变压器温度")
         """
-        super().__init__(
-            engine=engine,
-            bm25_retriever=bm25_retriever,
-            alpha=alpha,
-            top_k=top_k,
-            rrf_k=rrf_k,
-        )
+        super().__init__()
+        self.engine = engine
+        self.bm25_retriever = bm25_retriever
+        self.alpha = alpha
+        self.top_k = top_k
+        self.rrf_k = rrf_k
 
         if engine.vectorstore is None:
             raise ValueError("RAGEngine的vectorstore未初始化")
@@ -86,35 +86,28 @@ class HybridRetriever(BaseRetriever):
         *,
         run_manager: Any = None,
     ) -> list[Document]:
-        """混合检索
-
-        Args:
-            query: 查询文本
-            run_manager: 运行管理器（可选）
-
-        Returns:
-            融合后的文档列表
-        """
-        # 1. 向量检索
         if self.engine.vectorstore is None:
-            vector_docs = []
-            vector_ranks = {}
+            vector_docs: list[Document] = []
         else:
             vector_docs = self.engine.vectorstore.similarity_search(query, k=self.top_k * 2)
-            # 创建文档到排名的映射
-            vector_ranks = {
-                self._get_doc_key(doc): i
-                for i, doc in enumerate(vector_docs)
-            }
 
-        # 2. BM25检索
         bm25_docs = self.bm25_retriever.invoke(query)
-        bm25_ranks = {
-            self._get_doc_key(doc): i
-            for i, doc in enumerate(bm25_docs)
-        }
 
-        # 3. 融合结果（RRF）
+        key_to_doc: dict[str, Document] = {}
+        vector_ranks: dict[str, int] = {}
+        bm25_ranks: dict[str, int] = {}
+
+        for i, doc in enumerate(vector_docs):
+            key = self._get_doc_key(doc)
+            vector_ranks[key] = i
+            key_to_doc[key] = doc
+
+        for i, doc in enumerate(bm25_docs):
+            key = self._get_doc_key(doc)
+            bm25_ranks[key] = i
+            if key not in key_to_doc:
+                key_to_doc[key] = doc
+
         fused_scores = self._reciprocal_rank_fusion(
             vector_ranks,
             bm25_ranks,
@@ -122,22 +115,16 @@ class HybridRetriever(BaseRetriever):
             k=self.rrf_k,
         )
 
-        # 4. 排序并返回top-k
-        sorted_docs = sorted(
+        sorted_keys = sorted(
             fused_scores.items(),
             key=lambda x: x[1],
             reverse=True,
         )
 
-        top_docs = [
-            doc for doc, score in sorted_docs[: self.top_k]
-        ]
+        top_docs = [key_to_doc[key] for key, _score in sorted_keys[: self.top_k] if key in key_to_doc]
 
         logger.info(
-            f"混合检索: query='{query}', "
-            f"向量={len(vector_docs)}篇, "
-            f"BM25={len(bm25_docs)}篇, "
-            f"融合后={len(top_docs)}篇"
+            f"混合检索: query='{query}', 向量={len(vector_docs)}篇, BM25={len(bm25_docs)}篇, 融合后={len(top_docs)}篇"
         )
 
         return top_docs
@@ -202,6 +189,7 @@ class HybridRetriever(BaseRetriever):
 
 # 测试代码
 if __name__ == "__main__":
+
     def test_hybrid_retriever():
         """测试混合检索器"""
         from rich.console import Console

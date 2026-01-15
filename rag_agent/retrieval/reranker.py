@@ -125,11 +125,7 @@ class CohereReranker(BaseReranker):
                 doc.metadata["rerank_score"] = result.get("relevance_score", 0.0)
                 reranked_docs.append(doc)
 
-            logger.info(
-                f"Cohere重排序: query='{query}', "
-                f"输入{len(documents)}篇, "
-                f"返回{len(reranked_docs)}篇"
-            )
+            logger.info(f"Cohere重排序: query='{query}', 输入{len(documents)}篇, 返回{len(reranked_docs)}篇")
 
             return reranked_docs
 
@@ -189,10 +185,7 @@ class BGEReranker(BaseReranker):
             logger.info("BGE重排序模型加载完成")
 
         except ImportError:
-            logger.error(
-                "未安装sentence_transformers，请运行: "
-                "uv pip install sentence-transformers"
-            )
+            logger.error("未安装sentence_transformers，请运行: uv pip install sentence-transformers")
             raise
         except Exception as e:
             logger.error(f"加载BGE模型失败: {e}", exc_info=True)
@@ -223,11 +216,13 @@ class BGEReranker(BaseReranker):
 
         top_k = top_k or len(documents)
 
-        # 准备查询-文档对
         pairs = [[query, doc.page_content] for doc in documents]
 
-        # 计算分数
         try:
+            if self._model is None:
+                logger.warning("BGE模型未加载，返回原始顺序")
+                return documents[:top_k]
+
             scores = self._model.predict(pairs)
 
             # 排序
@@ -240,11 +235,7 @@ class BGEReranker(BaseReranker):
                 doc.metadata["rerank_score"] = float(score)
                 reranked_docs.append(doc)
 
-            logger.info(
-                f"BGE重排序: query='{query}', "
-                f"输入{len(documents)}篇, "
-                f"返回{len(reranked_docs)}篇"
-            )
+            logger.info(f"BGE重排序: query='{query}', 输入{len(documents)}篇, 返回{len(reranked_docs)}篇")
 
             return reranked_docs
 
@@ -293,9 +284,7 @@ class Reranker:
 
         elif type == "bge":
             self.reranker = BGEReranker(
-                model_name=kwargs.get(
-                    "model_name", "BAAI/bge-reranker-v2-m3"
-                ),
+                model_name=kwargs.get("model_name", "BAAI/bge-reranker-v2-m3"),
                 device=kwargs.get("device", "cpu"),
             )
 
@@ -323,6 +312,7 @@ class Reranker:
 
 # 测试代码
 if __name__ == "__main__":
+
     def test_reranker():
         """测试重排序器"""
         from rich.console import Console

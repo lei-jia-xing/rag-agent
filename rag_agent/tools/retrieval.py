@@ -3,7 +3,6 @@
 提供基于向量数据库的文档检索功能。
 """
 
-
 from langchain_core.tools import tool
 
 from rag_agent.rag_engine import RAGEngine
@@ -80,7 +79,7 @@ async def retrieve_fault_cases(device_name: str, k: int = 3) -> str:
         案例1: 变压器油温异常升高...
     """
     query = f"{device_name} 故障案例 异常 处理"
-    return await retrieve_device_info.ainvoke(query, k)
+    return await retrieve_device_info.ainvoke({"query": query, "k": k})
 
 
 @tool
@@ -100,7 +99,7 @@ async def retrieve_technical_standards(keyword: str, k: int = 3) -> str:
         >>> result = await retrieve_technical_standards.ainvoke("变压器绝缘", k=3)
     """
     query = f"{keyword} 标准 规范 GB DL"
-    return await retrieve_device_info.ainvoke(query, k)
+    return await retrieve_device_info.ainvoke({"query": query, "k": k})
 
 
 @tool

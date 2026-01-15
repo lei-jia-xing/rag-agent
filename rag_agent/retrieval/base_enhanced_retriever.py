@@ -125,20 +125,10 @@ class EnhancedRetriever:
         """
         # 使用默认设置
         enable_query_expansion = (
-            enable_query_expansion
-            if enable_query_expansion is not None
-            else self.enable_query_expansion
+            enable_query_expansion if enable_query_expansion is not None else self.enable_query_expansion
         )
-        enable_hybrid_search = (
-            enable_hybrid_search
-            if enable_hybrid_search is not None
-            else self.enable_hybrid_search
-        )
-        enable_reranking = (
-            enable_reranking
-            if enable_reranking is not None
-            else self.enable_reranking
-        )
+        enable_hybrid_search = enable_hybrid_search if enable_hybrid_search is not None else self.enable_hybrid_search
+        enable_reranking = enable_reranking if enable_reranking is not None else self.enable_reranking
 
         # 1. 查询扩展
         queries_to_search = [query]
@@ -270,6 +260,7 @@ class EnhancedRetriever:
 
 # 测试代码
 if __name__ == "__main__":
+
     def test_enhanced_retriever():
         """测试增强检索器"""
         from rich.console import Console

@@ -136,6 +136,7 @@ def get_short_term_memory() -> ShortTermMemory:
 
 # 测试代码
 if __name__ == "__main__":
+
     def test_short_term_memory():
         """测试短期记忆"""
         console.print("[bold cyan]测试 Short-term Memory[/bold cyan]\n")
