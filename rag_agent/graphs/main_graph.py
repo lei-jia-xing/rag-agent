@@ -3,7 +3,6 @@
 集成路由、诊断和问答功能的主智能体。
 """
 
-
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph as CompiledGraphType
 
@@ -52,10 +51,16 @@ def build_main_graph() -> CompiledGraphType:
     # 为了简化，我们直接将子图的入口节点作为主图的节点
     # 实际应用中可能需要更复杂的集成方式
     from rag_agent.agents.diagnosis_agent import (
-        diagnosis_analysis_node,
-        diagnosis_fields_node,
-        diagnosis_report_node,
-        diagnosis_retrieval_node,
+        core_assessment_node as diagnosis_analysis_node,
+    )
+    from rag_agent.agents.diagnosis_agent import (
+        merge_fields_node as diagnosis_fields_node,
+    )
+    from rag_agent.agents.diagnosis_agent import (
+        report_node as diagnosis_report_node,
+    )
+    from rag_agent.agents.diagnosis_agent import (
+        retrieval_node as diagnosis_retrieval_node,
     )
     from rag_agent.agents.qa_agent import qa_retrieval_node, qa_synthesis_node
 

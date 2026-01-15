@@ -192,8 +192,7 @@ async def qa_synthesis_node(state: QAState) -> dict:
                 ),
                 (
                     "human",
-                    "问题：{query}\n\n参考信息：\n{context}\n\n"
-                    "请基于以上信息回答问题。",
+                    "问题：{query}\n\n参考信息：\n{context}\n\n请基于以上信息回答问题。",
                 ),
             ]
         )
@@ -202,9 +201,8 @@ async def qa_synthesis_node(state: QAState) -> dict:
         chain = qa_prompt | llm
         response = await chain.ainvoke({"query": query, "context": context})
 
-        answer = response.content
+        answer = str(response.content) if response.content else ""
 
-        # 计算置信度（简单启发式方法）
         confidence = calculate_confidence(query, answer, context)
 
         # 提取来源

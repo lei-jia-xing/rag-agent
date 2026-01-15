@@ -38,6 +38,10 @@ class Config:
     # 向量数据库持久化路径
     VECTORSTORE_PATH: str = os.getenv("VECTORSTORE_PATH", str(Path(__file__).parent.parent / ".vectorstore"))
 
+    RETRIEVAL_TOP_K: int = int(os.getenv("RETRIEVAL_TOP_K", "10"))
+    DIAGNOSIS_TEMPLATE_ID: str = os.getenv("DIAGNOSIS_TEMPLATE_ID", "device_diagnosis")
+    LATEX_COMPILATION_TIMEOUT: int = int(os.getenv("LATEX_COMPILATION_TIMEOUT", "120"))
+
     @classmethod
     def validate(cls) -> bool:
         """验证必要的配置是否存在

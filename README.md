@@ -174,15 +174,9 @@ if result["success"]:
 
 ### 📚 文档
 
-完整的文档请查看 [docs/INDEX.md](docs/INDEX.md)：
-- [快速开始指南](docs/QUICKSTART.md) - 开发环境配置
+项目文档位于 `docs/` 目录：
 - [架构设计文档](docs/ARCHITECTURE.md) - LangGraph 多智能体架构
-- [代码质量报告](docs/CODE_QUALITY_REPORT.md) - Ruff + Pyright 优化
-- [实施进度追踪](docs/IMPLEMENTATION_STATUS.md) - 功能完成情况
-- [**智能体增强路线图**](docs/AGENT_ENHANCEMENT_ROADMAP.md) - v2.0 增强计划 ⭐
-- [**增强 TODO**](docs/ENHANCEMENT_TODO.md) - 快速任务列表 ⭐
-- [**优质数据集推荐**](docs/DATASET_QUICKSTART.md) - 数据集快速参考 🆕
-- [**数据集详细指南**](docs/DATASET_RECOMMENDATIONS.md) - 数据集使用指南 🆕
+- [数据集使用指南](docs/DATASET_RECOMMENDATIONS.md) - 多数据集配置
 
 ### 项目结构
 
@@ -324,92 +318,92 @@ DATASET_NAME=cmrc2018                 # 中文阅读理解
 - [x] 报告输出到 `reports/` 目录
 - [x] 模板系统迁移到 LaTeX MCP
 
-#### 多数据集支持 ⭐ NEW
-- [x] 实现 MultiDatasetLoader（支持多个数据集同时加载）
+#### 多数据集支持
+- [x] 实现 MultiDatasetLoader（支持 4 种数据集格式）
 - [x] 更新配置系统支持 MULTI_DATASETS
 - [x] 集成到 CLI build 命令
-- [x] 添加测试脚本和验证
-- [x] 创建多数据集集成文档
-- [ ] ⏳ BAAI数据集下载（等待网络连接）
-- [ ] ⏳ 向量数据库重建（等待网络连接）
+- [x] 添加数据预处理（质量过滤、去重）
+- [x] 创建多数据集使用文档
+- [ ] ⏳ BAAI 数据集下载（等待网络）
+
+#### 检索系统增强
+- [x] 实现 BM25 稀疏检索 → `bm25_retriever.py`
+- [x] 实现混合检索（RRF 融合）→ `hybrid_retriever.py`
+- [x] 实现 Cross-Encoder Reranker → `reranker.py`
+- [x] 实现 LLM 查询扩展 → `query_expander.py`
+- [x] 修复 22 个 Pyright 类型错误
 
 ### 🔥 高优先级（架构重构）
+
+#### RAGEngine 重构（核心技术债务）
+- [ ] 拆分 `RAGEngine`（462 行 → 多个服务）
+  - [ ] `VectorStoreService` - 向量库管理（加载、保存、检索）
+  - [ ] `GenerationService` - LLM 调用封装
+  - [ ] `PromptRegistry` - 提示词管理
+- [ ] 同步/异步统一
+  - [ ] 将 `invoke()` 迁移到 `ainvoke()`
+  - [ ] 移除 `latex_client.py` 中的 `asyncio.run()` 嵌套
+  - [ ] 修复 `base_enhanced_retriever.py` 的阻塞式异步包装
+- [ ] Prompt 模板外部化
+  - [ ] 将 4 处硬编码 Prompt 移至 `prompts/` 目录
+  - [ ] 支持 YAML/Jinja2 格式
+  - [ ] 支持版本管理和热更新
+
+#### 错误处理与类型安全
+- [ ] 定义自定义异常类
+  - [ ] `RetrievalError` - 检索失败
+  - [ ] `LLMGenerationError` - 生成失败
+  - [ ] `ConfigurationError` - 配置错误
+- [ ] 替换手动 JSON 解析（`rag_engine.py:414`）
+  - [ ] 使用 LangChain `JsonOutputParser`
+  - [ ] 使用 `PydanticOutputParser` 验证输出
+- [ ] 配置管理重构
+  - [ ] 迁移到 `pydantic-settings`
+  - [ ] 添加配置验证（如 `DATASET_SAMPLE_SIZE > 0`）
+  - [ ] 支持环境变量层次
 
 #### 测试与质量保证
 - [ ] 添加单元测试（目标覆盖率 80%+）
   - [ ] `rag_engine.py` 测试
-  - [ ] `report_app.py` 测试
+  - [ ] `multi_dataset_loader.py` 测试
   - [ ] `latex_client.py` 测试
-- [ ] 添加集成测试
-- [ ] 添加端到端测试
-- [ ] 添加性能测试（检索、生成）
-
-#### 代码重构
-- [ ] 拆分 `RAGEngine`（466 行 → 多个服务）
-  - [ ] `RetrievalService` - 检索服务
-  - [ ] `GenerationService` - 生成服务
-  - [ ] `ReportService` - 报告服务
-- [ ] 统一错误处理机制
-  - [ ] 定义自定义异常类
-  - [ ] 标准化错误响应
-  - [ ] 添加重试机制
-- [ ] 配置管理重构
-  - [ ] 使用 Pydantic Settings
-  - [ ] 支持环境变量层次
-  - [ ] 添加配置验证
-
-#### Prompt 管理
-- [ ] Prompt 模板外部化
-  - [ ] 创建 `prompts/` 目录
-  - [ ] 支持版本管理
-  - [ ] 支持热更新
-- [ ] 实现提示词测试框架
-- [ ] 添加提示词性能对比
+- [ ] 添加集成测试（RAG 流程端到端）
+- [ ] 添加性能基准测试（检索延迟、生成延迟）
 
 ### ⚡ 中优先级（功能增强）
+
+#### 检索增强 ⭐ 部分已实现
+- [x] 实现混合检索（BM25 + 向量）→ `hybrid_retriever.py`
+- [x] 添加 Reranker 重排序 → `reranker.py`
+- [x] 查询改写和优化 → `query_expander.py`
+- [ ] 评估检索效果，建立基准线
+- [ ] 尝试更好的中文 Embedding 模型（bge-large-zh、m3e-large）
+- [ ] Embedding 模型单例缓存（避免重复加载）
 
 #### 向量存储优化
 - [ ] 实现向量存储抽象层
   - [ ] 定义 `VectorStore` 接口
-  - [ ] 支持多种数据库（FAISS、Chroma、Qdrant）
-- [ ] Embedding 模型缓存
-  - [ ] 单例模式管理
-  - [ ] 支持 GPU 加速
+  - [ ] 支持多种后端（FAISS、Chroma、Qdrant）
+- [ ] 增量更新机制（无需完全重建）
 - [ ] 向量数据库版本控制
-- [ ] 增量更新机制（无需重建）
 
 #### LangChain/LangGraph 最佳实践
 - [x] 实现 Agent 系统（基于 LangGraph）
-  - [x] 定义 Tool 接口
-  - [x] 实现 Router Agent（意图分类）
-  - [x] 实现 Diagnosis Agent（多节点工作流）
-  - [x] 实现 QA Agent（问答流程）
-- [x] 添加 Memory 管理
-  - [x] 对话历史存储（short_term.py）
-  - [x] 长期记忆向量存储（long_term.py）
+- [x] 添加 Memory 管理（短期 + 长期）
 - [ ] 集成 LangSmith 追踪
-- [ ] 实现 Output Parsers
+- [ ] 实现 Output Parsers（替代手动解析）
 - [ ] 添加 Reasoning Agent（复杂推理）
+- [ ] 诊断流程并行化（`asyncio.gather`）
 
 #### 日志与监控
-- [ ] 结构化日志系统
-  - [ ] 使用 structlog
-  - [ ] 日志级别管理
-  - [ ] 日志聚合
-- [ ] 添加性能监控
-  - [ ] 检索延迟
-  - [ ] LLM 调用次数
-  - [ ] Token 统计
-- [ ] 添加业务指标
-  - [ ] 查询成功率
-  - [ ] 用户满意度
+- [ ] 结构化日志系统（structlog）
+- [ ] 添加性能监控（检索延迟、LLM 调用、Token 统计）
+- [ ] 添加业务指标（查询成功率）
 
 ### 🚀 低优先级（长期规划）
 
 #### 性能优化
-- [ ] 异步处理支持
-  - [ ] 异步检索
-  - [ ] 异步 LLM 调用
+- [ ] 完整异步支持（检索 + LLM）
 - [ ] 批量处理优化
 - [ ] 添加缓存层（Redis）
 - [ ] 流式输出支持
@@ -420,14 +414,6 @@ DATASET_NAME=cmrc2018                 # 中文阅读理解
 - [ ] LangServe 部署
 - [ ] Web UI 界面
 - [ ] API 服务化
-
-#### 检索增强
-- [ ] 评估当前检索效果，建立基准线
-- [ ] 尝试更好的中文 Embedding 模型（bge-large-zh、m3e-large）
-- [ ] 实现混合检索（BM25 + 向量）
-- [ ] 添加 Reranker 重排序
-- [ ] 扩充高质量数据集
-- [ ] 查询改写和优化
 
 ---
 

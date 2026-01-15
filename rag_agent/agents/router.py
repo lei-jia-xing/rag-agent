@@ -108,8 +108,7 @@ ENHANCED_INTENT_CLASSIFICATION_PROMPT = ChatPromptTemplate.from_messages(
         ),
         (
             "human",
-            "用户查询：{query}\n\n"
-            "分析：",
+            "用户查询：{query}\n\n分析：",
         ),
     ]
 )
@@ -179,18 +178,12 @@ async def classify_intent_enhanced(query: str) -> tuple[str, float]:
     # 使用增强的LLM分类
     try:
         chain = ENHANCED_INTENT_CLASSIFICATION_PROMPT | llm
-        response = await chain.ainvoke({
-            "query": query,
-            "examples": INTENT_EXAMPLES
-        })
+        response = await chain.ainvoke({"query": query, "examples": INTENT_EXAMPLES})
 
-        # 解析响应
-        intent, confidence = parse_llm_response(response.content)
+        response_text = str(response.content) if response.content else ""
+        intent, confidence = parse_llm_response(response_text)
 
-        logger.info(
-            f"增强意图分类: query='{query}', "
-            f"intent='{intent}', confidence={confidence:.2f}"
-        )
+        logger.info(f"增强意图分类: query='{query}', intent='{intent}', confidence={confidence:.2f}")
 
         return intent, confidence
 
@@ -227,18 +220,39 @@ def rule_based_intent_classification(query: str) -> str:
 
     # 诊断意图关键词
     diagnosis_keywords = [
-        "诊断", "报告", "分析", "评估", "健康",
-        "故障分析", "状态评估", "生成报告",
-        "diagnosis", "report", "analyze", "evaluate",
-        "运行正常", "状态", "检测"
+        "诊断",
+        "报告",
+        "分析",
+        "评估",
+        "健康",
+        "故障分析",
+        "状态评估",
+        "生成报告",
+        "diagnosis",
+        "report",
+        "analyze",
+        "evaluate",
+        "运行正常",
+        "状态",
+        "检测",
     ]
 
     # 推理意图关键词
     reasoning_keywords = [
-        "为什么导致", "如果", "计算", "推断",
-        "综合", "多步", "推理", "后果",
-        "why", "calculate", "infer", "reasoning",
-        "会怎样", "影响"
+        "为什么导致",
+        "如果",
+        "计算",
+        "推断",
+        "综合",
+        "多步",
+        "推理",
+        "后果",
+        "why",
+        "calculate",
+        "infer",
+        "reasoning",
+        "会怎样",
+        "影响",
     ]
 
     # 检查关键词
@@ -285,10 +299,7 @@ async def router_node(state: AgentState) -> dict:
 
     # 显示结果
     confidence_level = "高" if confidence >= 0.8 else "中" if confidence >= 0.6 else "低"
-    console.print(
-        f"[green]✓ 意图识别: {intent}[/green] "
-        f"[dim](置信度: {confidence:.2f}, {confidence_level})[/dim]"
-    )
+    console.print(f"[green]✓ 意图识别: {intent}[/green] [dim](置信度: {confidence:.2f}, {confidence_level})[/dim]")
 
     # 如果置信度过低，标记需要澄清
     need_clarification = confidence < 0.6
@@ -359,12 +370,7 @@ if __name__ == "__main__":
 
             confidence_level = "高" if confidence >= 0.8 else "中" if confidence >= 0.6 else "低"
 
-            table.add_row(
-                query,
-                f"[green]{intent}[/green]",
-                f"{confidence:.2f}",
-                confidence_level
-            )
+            table.add_row(query, f"[green]{intent}[/green]", f"{confidence:.2f}", confidence_level)
 
         console.print(table)
         console.print("\n[bold green]✓ 路由系统测试完成[/bold green]")

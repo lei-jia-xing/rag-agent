@@ -31,7 +31,7 @@ class TemplateManager:
         self.jinja_env = Environment(
             loader=FileSystemLoader(str(self.templates_dir)),
             variable_start_string="[[",  # 使用 [[ 作为变量开始
-            variable_end_string="]]",    # 使用 ]] 作为变量结束
+            variable_end_string="]]",  # 使用 ]] 作为变量结束
         )
 
         logger.info(f"模板管理器初始化: {self.templates_dir}")

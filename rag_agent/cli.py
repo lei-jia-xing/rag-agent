@@ -332,8 +332,9 @@ def build(
 
             # 显示统计
             stats = loader.get_dataset_stats()
-            console.print(f"\n[green]已加载 {stats['total_datasets']} 个数据集，"
-                         f"共 {stats['total_documents']} 条数据[/green]")
+            console.print(
+                f"\n[green]已加载 {stats['total_datasets']} 个数据集，共 {stats['total_documents']} 条数据[/green]"
+            )
 
         else:
             # 使用单一数据集模式（向后兼容）

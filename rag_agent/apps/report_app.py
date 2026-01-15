@@ -166,18 +166,15 @@ class ReportApp(BaseApp):
         device_name: str,
         output_path: str | Path | None = None,
     ) -> str:
-        """生成设备健康诊断报告（使用 LangGraph 诊断流程）"""
+        """生成设备健康诊断报告"""
         try:
-            console.print("[cyan]启动诊断流程（LangGraph）...[/cyan]")
+            console.print("[cyan]启动诊断流程（10节点）...[/cyan]")
             start_time = time.time()
 
             initial_state: DiagnosisState = {
                 "query": device_name,
                 "device_name": "",
                 "documents": [],
-                "diagnosis_data": {},
-                "report_path": "",
-                "analysis_result": "",
                 "messages": [],
             }
 
