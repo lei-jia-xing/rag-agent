@@ -26,6 +26,10 @@ class Config:
     DATASET_SPLIT: str = os.getenv("DATASET_SPLIT", "train")
     DATASET_SAMPLE_SIZE: int = int(os.getenv("DATASET_SAMPLE_SIZE", "100"))
 
+    # 多数据集支持（优先级高于单一数据集）
+    # 格式: "electrical_engineering,baa_industrial" 或 "all" 加载所有
+    MULTI_DATASETS: str | None = os.getenv("MULTI_DATASETS", None)
+
     # 向量数据库配置
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     CHUNK_SIZE: int = 500

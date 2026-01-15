@@ -6,12 +6,22 @@ The actual MCP server uses stdio, not HTTP.
 
 import asyncio
 import logging
+from datetime import datetime
+from pathlib import Path
 import signal
 import sys
 
+# 配置日志 - 只使用文件日志，不输出到控制台
+logs_dir = Path('/workspace/logs')
+logs_dir.mkdir(exist_ok=True)
+
+log_file = logs_dir / f"run_server_{datetime.now().strftime('%Y%m%d')}.log"
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8')
+    ]
 )
 logger = logging.getLogger(__name__)
 

@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -19,43 +20,32 @@ import mcp.types as types
 from mcp.server import InitializationOptions, NotificationOptions, Server
 from template_manager import TemplateManager
 
-# Configure logging
+# Configure logging - 只使用文件日志，不输出到 stdout/stderr
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 date_format = '%Y-%m-%d %H:%M:%S'
 
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-
 # Get root logger
 root_logger = logging.getLogger()
 root_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-root_logger.addHandler(console_handler)
 
 # Create module logger
 logger = logging.getLogger(__name__)
 
-# Add file handler if logs directory exists and is writable
+# 只使用文件日志，不输出到控制台（避免污染 MCP stdio 通信）
 logs_dir = Path('/workspace/logs')
-if logs_dir.exists():
-    try:
-        log_file = logs_dir / f"mcp_latex_{datetime.now().strftime('%Y%m%d')}.log"
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-        root_logger.addHandler(file_handler)
-        logger.info(f"日志文件: {log_file}")
-    except (PermissionError, OSError) as e:
-        # 如果无法写入日志文件，只使用控制台输出
-        logger.warning(f"无法创建日志文件处理器，仅使用控制台输出: {e}")
-else:
-    logger.warning("logs 目录不存在，仅使用控制台输出")
+logs_dir.mkdir(exist_ok=True)
+
+log_file = logs_dir / f"mcp_latex_{datetime.now().strftime('%Y%m%d')}.log"
+file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+root_logger.addHandler(file_handler)
 
 logger.info("=" * 60)
 logger.info("LaTeX MCP Server 启动")
 logger.info(f"日志级别: {LOG_LEVEL}")
+logger.info(f"日志文件: {log_file}")
 logger.info("=" * 60)
 
 

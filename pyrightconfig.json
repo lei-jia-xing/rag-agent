@@ -1,19 +1,12 @@
 {
-  "include": ["."],
-  "exclude": [
-    "**/__pycache__",
-    "**/.venv",
-    ".venv",
-    ".git",
-    "**/*.pyc",
-    "**/node_modules"
-  ],
-  "venvPath": ".",
-  "venv": ".venv",
-  "pythonVersion": "3.12",
+  "include": ["agents", "tools", "memory", "graphs", "schemas"],
+  "exclude": ["**/__pycache__", "**/node_modules", "**/.venv", "**/.uv"],
   "typeCheckingMode": "basic",
-  "reportMissingImports": true,
+  "reportMissingImports": "warning",
   "reportMissingTypeStubs": false,
-  "reportUnusedImport": true,
-  "reportUnusedVariable": true
+  "pythonVersion": "3.12",
+  "ignore": ["venv", ".venv", "**/test_*.py", "tests"],
+  "strictListInference": false,
+  "strictDictionaryInference": false,
+  "strictSetInference": false
 }

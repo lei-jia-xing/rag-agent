@@ -188,12 +188,10 @@ class RAGEngine:
         if not self.vectorstore or not self.retriever:
             raise RuntimeError("RAG 引擎未初始化，请先调用 initialize()")
 
-        console.print(f"[cyan]正在检索: {query}[/cyan]")
         try:
             # 动态调整 k 值
             current_retriever = self.vectorstore.as_retriever(search_kwargs={"k": k})
             documents = current_retriever.invoke(query)
-            console.print(f"[green]检索到 {len(documents)} 个相关文档[/green]")
             return documents
         except Exception as e:
             console.print(f"[red]检索失败: {e}[/red]")
@@ -393,8 +391,6 @@ class RAGEngine:
         """
         if not self.llm:
             raise RuntimeError("RAG 引擎未初始化，请先调用 initialize()")
-
-        console.print(f"[cyan]正在生成诊断字段: {device_name}[/cyan]")
 
         try:
             context = "\n\n".join([doc.page_content for doc in documents])

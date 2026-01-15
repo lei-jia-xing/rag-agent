@@ -356,9 +356,7 @@ def generate_diagnosis_report(
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                return loop.run_until_complete(
-                    generate_diagnosis_report_async(data, template_id, server_params)
-                )
+                return loop.run_until_complete(generate_diagnosis_report_async(data, template_id, server_params))
             finally:
                 loop.close()
     except RuntimeError:
@@ -366,8 +364,6 @@ def generate_diagnosis_report(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(
-                generate_diagnosis_report_async(data, template_id, server_params)
-            )
+            return loop.run_until_complete(generate_diagnosis_report_async(data, template_id, server_params))
         finally:
             loop.close()
