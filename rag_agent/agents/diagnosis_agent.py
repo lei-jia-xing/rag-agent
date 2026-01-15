@@ -1,21 +1,36 @@
 """Diagnosis Agent - 设备诊断智能体
 
-负责设备健康诊断的完整流程：
-1. 检索相关文档（使用增强检索）
-2. 分析设备状态
-3. 生成诊断字段
-4. 生成PDF报告
+诊断流程（10节点，优化并行）：
+1. 检索 - 检索获取设备文档
+2. 核心评估 - 健康评分、风险等级
+3-6. 并行分析 - 故障分析、风险分析、设备信息、监测分析（asyncio.gather）
+7. 维护建议生成 - 维护计划字段组
+8. 一致性校验 - 校验并修正矛盾
+9. 合并输出 - 整合所有字段
+10. 报告生成 - LaTeX PDF
 """
 
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
-from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from rich.console import Console
 
+from rag_agent.config import config
+from rag_agent.mcp.latex_client import generate_diagnosis_report_async
+from rag_agent.prompts.diagnosis import (
+    CORE_ASSESSMENT_PROMPT,
+    DEVICE_INFO_PROMPT,
+    FAULT_ANALYSIS_PROMPT,
+    FEW_SHOT_EXAMPLE,
+    MAINTENANCE_PROMPT,
+    MONITORING_PROMPT,
+    RISK_ANALYSIS_PROMPT,
+    VALIDATION_PROMPT,
+)
 from rag_agent.rag_engine import RAGEngine
 from rag_agent.retrieval import EnhancedRetriever
 from rag_agent.schemas.diagnosis import DiagnosisFields
@@ -24,13 +39,12 @@ from rag_agent.schemas.state import DiagnosisState
 console = Console()
 logger = logging.getLogger(__name__)
 
-# 全局实例
 _engine: RAGEngine | None = None
 _enhanced_retriever: EnhancedRetriever | None = None
+_json_parser: JsonOutputParser | None = None
 
 
 def get_engine() -> RAGEngine:
-    """获取或初始化 RAGEngine 实例"""
     global _engine
     if _engine is None:
         _engine = RAGEngine()
@@ -39,391 +53,464 @@ def get_engine() -> RAGEngine:
 
 
 def get_enhanced_retriever() -> EnhancedRetriever:
-    """获取或初始化增强检索器"""
     global _enhanced_retriever
     if _enhanced_retriever is None:
         engine = get_engine()
         _enhanced_retriever = EnhancedRetriever(
             engine=engine,
             enable_query_expansion=True,
-            enable_hybrid_search=False,  # 需要文档构建BM25索引
-            enable_reranking=False,  # 可选：启用重排序
+            enable_hybrid_search=False,
+            enable_reranking=False,
         )
-        logger.info("增强检索器初始化完成")
     return _enhanced_retriever
 
 
-async def diagnosis_retrieval_node(state: DiagnosisState) -> dict:
-    """诊断流程 - 检索节点（使用增强检索）
+def get_json_parser() -> JsonOutputParser:
+    global _json_parser
+    if _json_parser is None:
+        _json_parser = JsonOutputParser()
+    return _json_parser
 
-    根据设备名称或问题描述，使用增强检索技术检索相关的技术文档、
-    故障案例、维护记录等信息。
 
-    增强功能：
-    - 查询重写：优化设备名称描述
-    - 多查询生成：从不同角度检索设备信息
-    - 更多上下文：k=10获取更全面的信息
+def _extract_json_from_markdown(text: str) -> str:
+    """Extract JSON from markdown code blocks."""
+    if "```json" in text:
+        return text.split("```json")[1].split("```")[0].strip()
+    if "```" in text:
+        return text.split("```")[1].split("```")[0].strip()
+    return text
 
-    Args:
-        state: 诊断状态，包含查询信息
 
-    Returns:
-        更新后的状态，包含检索到的文档
+def _clean_control_chars(text: str) -> str:
+    """Remove control characters that break JSON parsing."""
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
 
-    Examples:
-        >>> state = {"query": "变压器异常振动", "device_name": "", ...}
-        >>> result = await diagnosis_retrieval_node(state)
-        >>> print(f"检索到 {len(result['documents'])} 个文档")
-    """
+
+def _parse_json_response(response_text: str) -> dict[str, Any]:
+    """Parse JSON from LLM response with multiple fallback strategies."""
+    parser = get_json_parser()
+
+    cleaned_text = _clean_control_chars(response_text)
+
+    try:
+        return parser.parse(cleaned_text)
+    except Exception:
+        pass
+
+    try:
+        return json.loads(cleaned_text)
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        extracted = _extract_json_from_markdown(cleaned_text)
+        extracted = _clean_control_chars(extracted)
+        return json.loads(extracted)
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        return parser.parse(extracted)
+    except Exception as e:
+        logger.error(f"All JSON parsing strategies failed: {e}")
+        raise ValueError(f"Failed to parse JSON response: {response_text[:200]}...") from e
+
+
+async def _call_llm(engine: RAGEngine, system_prompt: str, human_message: str) -> dict[str, Any]:
+    if engine.llm is None:
+        raise RuntimeError("LLM 未初始化")
+
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_message),
+    ]
+    response = await engine.llm.ainvoke(messages)
+    return _parse_json_response(str(response.content))
+
+
+async def retrieval_node(state: DiagnosisState) -> dict:
     query = state["query"]
-    device_name = state.get("device_name", query)
+    device_name = state.get("device_name") or query
 
-    console.print(f"[dim]正在使用增强检索设备文档: {device_name}[/dim]")
+    console.print(f"[dim][1/10] 检索设备文档: {device_name}[/dim]")
 
     try:
         retriever = get_enhanced_retriever()
-
-        # 使用增强检索（获取更多文档用于诊断）
         documents = retriever.retrieve(
             query=device_name,
-            top_k=10,  # 诊断需要更多上下文
+            top_k=config.RETRIEVAL_TOP_K,
             enable_query_expansion=True,
-            enable_multi_query=True,  # 多角度检索
-            enable_hyde=False,  # HyDE（可选启用）
+            enable_multi_query=True,
         )
-
-        # 更新设备名称（如果之前为空）
-        if not state.get("device_name"):
-            state["device_name"] = device_name
-
-        console.print(f"[green]✓ 检索到 {len(documents)} 个相关文档（增强检索）[/green]")
-
-        return {
-            "documents": documents,
-            "device_name": device_name,
-        }
+        console.print(f"[green]✓ 检索到 {len(documents)} 个文档[/green]")
+        return {"documents": documents, "device_name": device_name}
 
     except Exception as e:
-        console.print(f"[red]✗ 增强检索失败: {e}[/red]")
-        logger.error(f"增强检索失败: {e}", exc_info=True)
-
-        # 降级到基础检索
-        console.print("[yellow]降级到基础检索...[/yellow]")
-        try:
-            engine = get_engine()
-            documents = engine.retrieve(device_name, k=10)
-
-            console.print(f"[yellow]✓ 基础检索返回 {len(documents)} 个文档[/yellow]")
-
-            return {
-                "documents": documents,
-                "device_name": device_name,
-            }
-        except Exception as e2:
-            console.print(f"[red]✗ 基础检索也失败: {e2}[/red]")
-            return {
-                "documents": [],
-                "device_name": device_name,
-            }
+        logger.error(f"检索失败: {e}", exc_info=True)
+        engine = get_engine()
+        documents = engine.retrieve(device_name, k=config.RETRIEVAL_TOP_K)
+        return {"documents": documents, "device_name": device_name}
 
 
-async def diagnosis_analysis_node(state: DiagnosisState) -> dict:
-    """诊断流程 - 分析节点
-
-    基于检索到的文档，使用 LLM 分析设备的当前状态、
-    识别潜在问题、评估健康程度。
-
-    Args:
-        state: 诊断状态，包含检索到的文档
-
-    Returns:
-        更新后的状态，包含分析结果
-
-    Examples:
-        >>> state = {"device_name": "变压器", "documents": [...], ...}
-        >>> result = await diagnosis_analysis_node(state)
-        >>> print(result["analysis_result"])
-    """
+async def core_assessment_node(state: DiagnosisState) -> dict:
     device_name = state["device_name"]
     documents = state["documents"]
 
     if not documents:
-        error_msg = f"未找到 {device_name} 的相关文档，无法进行分析"
-        console.print(f"[red]✗ {error_msg}[/red]")
-        return {"analysis_result": error_msg}
+        return {"core_assessment": {"health_score": 0, "health_status": "异常", "risk_level": "高", "issue_count": 0}}
 
-    console.print("[dim]正在分析设备状态...[/dim]")
-
-    try:
-        engine = get_engine()
-        llm = engine.llm
-
-        if llm is None:
-            raise RuntimeError("LLM 未初始化")
-
-        # 准备上下文
-        context = "\n\n".join([doc.page_content for doc in documents])
-
-        # 构建分析提示
-        analysis_prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "你是一个专业的设备健康诊断专家。"
-                    "基于提供的文档信息，分析设备的当前状态。\n\n"
-                    "请提供以下方面的分析：\n"
-                    "1. 设备整体状态评估\n"
-                    "2. 发现的问题和异常\n"
-                    "3. 潜在的风险\n"
-                    "4. 紧急程度评估\n"
-                    "5. 建议的处理措施\n\n"
-                    "请以结构化的方式输出分析结果。",
-                ),
-                (
-                    "human",
-                    "设备名称：{device_name}\n\n相关文档信息：\n{context}\n\n请基于以上信息，提供详细的诊断分析。",
-                ),
-            ]
-        )
-
-        # 执行分析
-        chain = analysis_prompt | llm
-        response = await chain.ainvoke({"device_name": device_name, "context": context})
-
-        analysis_result = response.content
-
-        console.print("[green]✓ 设备状态分析完成[/green]")
-
-        return {"analysis_result": analysis_result}
-
-    except Exception as e:
-        error_msg = f"分析失败: {e}"
-        console.print(f"[red]✗ {error_msg}[/red]")
-        logger.error(f"分析失败: {e}", exc_info=True)
-        return {"analysis_result": error_msg}
-
-
-DIAGNOSIS_FIELDS_PROMPT = """你是一个专业的设备健康诊断专家。基于提供的上下文信息和分析结果，生成设备健康诊断报告的各个字段内容。
-
-**重要**：你必须返回一个纯JSON格式的响应，不要包含任何其他文字。
-
-返回的JSON必须包含以下字段：
-- title: 报告标题
-- report_id: 报告编号（格式：DX-YYYYMMDD-001）
-- device_name: 设备名称
-- device_model: 设备型号
-- location: 安装位置
-- diagnosis_date: 诊断日期
-- data_range: 数据采集范围
-- health_score: 整体健康评分（0-100）
-- health_status: 健康状态（正常/警告/异常/严重）
-- risk_level: 风险等级（低/中/高）
-- issue_count: 主要问题数
-- abstract: 诊断摘要
-- device_basic_info: 设备基本信息
-- operating_environment: 运行环境
-- maintenance_history: 历史维护记录
-- monitoring_data_summary: 监测数据汇总
-- key_metrics_analysis: 关键指标分析
-- trend_analysis: 趋势分析
-- anomaly_detection: 异常检测
-- fault_description: 故障现象描述
-- fault_cause_analysis: 故障原因分析
-- fault_location: 故障定位
-- urgent_measures: 紧急处理措施
-- maintenance_plan: 维护计划
-- spare_parts_suggestion: 备件建议
-- current_risks: 当前风险
-- potential_risks: 潜在风险
-- risk_control: 风险控制建议
-- conclusion_and_recommendations: 结论与建议
-- technical_parameters: 技术参数
-- related_standards: 相关标准
-- diagnosis_method: 诊断方法说明"""
-
-
-async def generate_diagnosis_fields_enhanced(
-    engine: RAGEngine,
-    device_name: str,
-    documents: list[Document],
-    analysis_result: str = "",
-) -> dict[str, Any]:
-    """生成诊断字段，整合分析结果作为额外上下文"""
-    if engine.llm is None:
-        raise RuntimeError("LLM 未初始化")
+    console.print("[dim][2/10] 核心健康评估...[/dim]")
 
     context = "\n\n".join([doc.page_content for doc in documents])
-
-    human_message = f"设备名称：{device_name}\n\n参考文档：\n{context}"
-    if analysis_result:
-        human_message += f"\n\n已有分析结果：\n{analysis_result}"
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", DIAGNOSIS_FIELDS_PROMPT),
-            ("human", human_message),
-        ]
-    )
-
-    chain = prompt | engine.llm
-    response = await chain.ainvoke({})
-    response_text = str(response.content)
-
-    try:
-        raw_data = json.loads(response_text)
-    except json.JSONDecodeError:
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            response_text = response_text.split("```")[1].split("```")[0].strip()
-        raw_data = json.loads(response_text)
-
-    validated = DiagnosisFields.from_llm_response(raw_data)
-    return validated.model_dump()
-
-
-async def diagnosis_fields_node(state: DiagnosisState) -> dict:
-    """诊断流程 - 字段生成节点
-
-    基于设备信息、检索文档和分析结果，生成报告所需的32个字段。
-    利用 analysis_result 作为额外上下文，使字段生成更加精准。
-
-    Args:
-        state: 诊断状态，包含文档和分析结果
-
-    Returns:
-        更新后的状态，包含诊断数据
-    """
-    device_name = state["device_name"]
-    documents = state["documents"]
-    analysis_result = state.get("analysis_result", "")
-
-    console.print("[dim]正在生成诊断字段数据...[/dim]")
+    human_msg = f"设备名称：{device_name}\n\n设备文档：\n{context}\n\n{FEW_SHOT_EXAMPLE}"
 
     try:
         engine = get_engine()
-        diagnosis_data = await generate_diagnosis_fields_enhanced(
-            engine=engine,
-            device_name=device_name,
-            documents=documents,
-            analysis_result=analysis_result,
-        )
-
-        console.print(f"[green]✓ 生成了 {len(diagnosis_data)} 个诊断字段[/green]")
-        return {"diagnosis_data": diagnosis_data}
-
+        result = await _call_llm(engine, CORE_ASSESSMENT_PROMPT, human_msg)
+        console.print(f"[green]✓ 健康评分: {result.get('health_score', 'N/A')}[/green]")
+        return {"core_assessment": result}
     except Exception as e:
-        console.print(f"[red]✗ 字段生成失败: {e}[/red]")
-        logger.error(f"字段生成失败: {e}", exc_info=True)
-        return {"diagnosis_data": {}}
+        logger.error(f"核心评估失败: {e}", exc_info=True)
+        return {"core_assessment": {"health_score": 50, "health_status": "警告", "risk_level": "中", "issue_count": 0}}
 
 
-async def diagnosis_report_node(state: DiagnosisState) -> dict:
-    """诊断流程 - 报告生成节点
+async def fault_analysis_node(state: DiagnosisState) -> dict:
+    device_name = state["device_name"]
+    documents = state["documents"]
+    core = state.get("core_assessment", {})
 
-    使用诊断字段数据，通过 LaTeX MCP 生成专业的 PDF 报告。
+    console.print("[dim][3/10] 故障分析...[/dim]")
 
-    Args:
-        state: 诊断状态，包含诊断数据
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"""设备名称：{device_name}
 
-    Returns:
-        更新后的状态，包含报告路径
+核心评估结果：
+- 健康评分：{core.get("health_score", "N/A")}
+- 健康状态：{core.get("health_status", "N/A")}
+- 风险等级：{core.get("risk_level", "N/A")}
+- 评估依据：{core.get("assessment_reasoning", "N/A")}
 
-    Examples:
-        >>> state = {"device_name": "变压器", "diagnosis_data": {...}, ...}
-        >>> result = await diagnosis_report_node(state)
-        >>> print(f"报告已生成: {result['report_path']}")
-    """
-    diagnosis_data = state["diagnosis_data"]
-
-    if not diagnosis_data:
-        error_msg = "诊断数据为空，无法生成报告"
-        console.print(f"[red]✗ {error_msg}[/red]")
-        return {"report_path": error_msg}
-
-    console.print("[dim]正在生成 PDF 报告...[/dim]")
+设备文档：
+{context}"""
 
     try:
-        # 调用 LaTeX MCP 生成报告
+        engine = get_engine()
+        result = await _call_llm(engine, FAULT_ANALYSIS_PROMPT, human_msg)
+        console.print("[green]✓ 故障分析完成[/green]")
+        return {"fault_analysis": result}
+    except Exception as e:
+        logger.error(f"故障分析失败: {e}", exc_info=True)
+        return {"fault_analysis": {}}
+
+
+async def risk_analysis_node(state: DiagnosisState) -> dict:
+    device_name = state["device_name"]
+    documents = state["documents"]
+    core = state.get("core_assessment", {})
+    fault = state.get("fault_analysis", {})
+
+    console.print("[dim][4/10] 风险分析...[/dim]")
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"""设备名称：{device_name}
+
+核心评估：健康评分 {core.get("health_score", "N/A")}，{core.get("health_status", "N/A")}
+
+故障分析：
+{fault.get("fault_description", "无")}
+
+设备文档：
+{context}"""
+
+    try:
+        engine = get_engine()
+        result = await _call_llm(engine, RISK_ANALYSIS_PROMPT, human_msg)
+        console.print("[green]✓ 风险分析完成[/green]")
+        return {"risk_analysis": result}
+    except Exception as e:
+        logger.error(f"风险分析失败: {e}", exc_info=True)
+        return {"risk_analysis": {}}
+
+
+async def _fault_analysis_task(state: DiagnosisState) -> dict:
+    """Internal task for parallel execution - fault analysis."""
+    device_name = state["device_name"]
+    documents = state["documents"]
+    core = state.get("core_assessment", {})
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"""设备名称：{device_name}
+
+核心评估结果：
+- 健康评分：{core.get("health_score", "N/A")}
+- 健康状态：{core.get("health_status", "N/A")}
+- 风险等级：{core.get("risk_level", "N/A")}
+- 评估依据：{core.get("assessment_reasoning", "N/A")}
+
+设备文档：
+{context}"""
+
+    try:
+        engine = get_engine()
+        return await _call_llm(engine, FAULT_ANALYSIS_PROMPT, human_msg)
+    except Exception as e:
+        logger.error(f"故障分析失败: {e}", exc_info=True)
+        return {}
+
+
+async def _risk_analysis_task(state: DiagnosisState) -> dict:
+    """Internal task for parallel execution - risk analysis."""
+    device_name = state["device_name"]
+    documents = state["documents"]
+    core = state.get("core_assessment", {})
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"""设备名称：{device_name}
+
+核心评估：健康评分 {core.get("health_score", "N/A")}，{core.get("health_status", "N/A")}
+
+设备文档：
+{context}"""
+
+    try:
+        engine = get_engine()
+        return await _call_llm(engine, RISK_ANALYSIS_PROMPT, human_msg)
+    except Exception as e:
+        logger.error(f"风险分析失败: {e}", exc_info=True)
+        return {}
+
+
+async def _device_info_task(state: DiagnosisState) -> dict:
+    """Internal task for parallel execution - device info."""
+    device_name = state["device_name"]
+    documents = state["documents"]
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"设备名称：{device_name}\n\n设备文档：\n{context}"
+
+    try:
+        engine = get_engine()
+        return await _call_llm(engine, DEVICE_INFO_PROMPT, human_msg)
+    except Exception as e:
+        logger.error(f"设备信息生成失败: {e}", exc_info=True)
+        return {}
+
+
+async def _monitoring_task(state: DiagnosisState) -> dict:
+    """Internal task for parallel execution - monitoring analysis."""
+    device_name = state["device_name"]
+    documents = state["documents"]
+    core = state.get("core_assessment", {})
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"""设备名称：{device_name}
+健康评分：{core.get("health_score", "N/A")}
+
+设备文档：
+{context}"""
+
+    try:
+        engine = get_engine()
+        return await _call_llm(engine, MONITORING_PROMPT, human_msg)
+    except Exception as e:
+        logger.error(f"监测分析失败: {e}", exc_info=True)
+        return {}
+
+
+async def parallel_analysis_node(state: DiagnosisState) -> dict:
+    """并行执行 4 个分析任务：故障分析、风险分析、设备信息、监测分析"""
+    console.print("[dim][3-6/10] 并行执行分析任务...[/dim]")
+
+    fault_task = asyncio.create_task(_fault_analysis_task(state))
+    risk_task = asyncio.create_task(_risk_analysis_task(state))
+    device_info_task = asyncio.create_task(_device_info_task(state))
+    monitoring_task = asyncio.create_task(_monitoring_task(state))
+
+    fault_result, risk_result, device_info_result, monitoring_result = await asyncio.gather(
+        fault_task, risk_task, device_info_task, monitoring_task
+    )
+
+    console.print("[green]✓ 并行分析完成[/green]")
+
+    return {
+        "fault_analysis": fault_result,
+        "risk_analysis": risk_result,
+        "device_info_fields": device_info_result,
+        "monitoring_fields": monitoring_result,
+    }
+
+
+async def device_info_node(state: DiagnosisState) -> dict:
+    device_name = state["device_name"]
+    documents = state["documents"]
+
+    console.print("[dim][5/10] 生成设备信息...[/dim]")
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"设备名称：{device_name}\n\n设备文档：\n{context}"
+
+    try:
+        engine = get_engine()
+        result = await _call_llm(engine, DEVICE_INFO_PROMPT, human_msg)
+        console.print("[green]✓ 设备信息生成完成[/green]")
+        return {"device_info_fields": result}
+    except Exception as e:
+        logger.error(f"设备信息生成失败: {e}", exc_info=True)
+        return {"device_info_fields": {}}
+
+
+async def monitoring_node(state: DiagnosisState) -> dict:
+    device_name = state["device_name"]
+    documents = state["documents"]
+    core = state.get("core_assessment", {})
+
+    console.print("[dim][6/10] 生成监测分析...[/dim]")
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"""设备名称：{device_name}
+健康评分：{core.get("health_score", "N/A")}
+
+设备文档：
+{context}"""
+
+    try:
+        engine = get_engine()
+        result = await _call_llm(engine, MONITORING_PROMPT, human_msg)
+        console.print("[green]✓ 监测分析完成[/green]")
+        return {"monitoring_fields": result}
+    except Exception as e:
+        logger.error(f"监测分析失败: {e}", exc_info=True)
+        return {"monitoring_fields": {}}
+
+
+async def maintenance_node(state: DiagnosisState) -> dict:
+    device_name = state["device_name"]
+    documents = state["documents"]
+    core = state.get("core_assessment", {})
+    fault = state.get("fault_analysis", {})
+    risk = state.get("risk_analysis", {})
+
+    console.print("[dim][7/10] 生成维护建议...[/dim]")
+
+    context = "\n\n".join([doc.page_content for doc in documents])
+    human_msg = f"""设备名称：{device_name}
+
+核心评估：
+- 健康评分：{core.get("health_score", "N/A")}
+- 健康状态：{core.get("health_status", "N/A")}
+- 风险等级：{core.get("risk_level", "N/A")}
+
+故障分析：
+- 故障描述：{fault.get("fault_description", "无")}
+- 故障原因：{fault.get("fault_cause_analysis", "无")}
+
+风险分析：
+- 当前风险：{risk.get("current_risks", "无")}
+- 潜在风险：{risk.get("potential_risks", "无")}
+
+设备文档：
+{context}"""
+
+    try:
+        engine = get_engine()
+        result = await _call_llm(engine, MAINTENANCE_PROMPT, human_msg)
+        console.print("[green]✓ 维护建议生成完成[/green]")
+        return {"maintenance_fields": result}
+    except Exception as e:
+        logger.error(f"维护建议生成失败: {e}", exc_info=True)
+        return {"maintenance_fields": {}}
+
+
+async def validation_node(state: DiagnosisState) -> dict:
+    console.print("[dim][8/10] 一致性校验...[/dim]")
+
+    core = state.get("core_assessment", {})
+    fault = state.get("fault_analysis", {})
+    risk = state.get("risk_analysis", {})
+    device_info = state.get("device_info_fields", {})
+    monitoring = state.get("monitoring_fields", {})
+    maintenance = state.get("maintenance_fields", {})
+
+    all_data = {**core, **fault, **risk, **device_info, **monitoring, **maintenance}
+
+    human_msg = f"请检查以下诊断数据的一致性：\n\n{json.dumps(all_data, ensure_ascii=False, indent=2)}"
+
+    try:
+        engine = get_engine()
+        result = await _call_llm(engine, VALIDATION_PROMPT, human_msg)
+
+        issues = result.get("issues", [])
+        corrections = result.get("corrections", {})
+
+        if corrections:
+            all_data.update(corrections)
+            console.print(f"[yellow]修正了 {len(corrections)} 个字段[/yellow]")
+
+        console.print(f"[green]✓ 校验完成，发现 {len(issues)} 个问题[/green]")
+        return {"validation_issues": [i.get("problem", "") for i in issues]}
+
+    except Exception as e:
+        logger.error(f"校验失败: {e}", exc_info=True)
+        return {"validation_issues": []}
+
+
+async def merge_fields_node(state: DiagnosisState) -> dict:
+    console.print("[dim][9/10] 合并诊断字段...[/dim]")
+
+    device_name = state.get("device_name", "未知设备")
+    core = state.get("core_assessment", {})
+    fault = state.get("fault_analysis", {})
+    risk = state.get("risk_analysis", {})
+    device_info = state.get("device_info_fields", {})
+    monitoring = state.get("monitoring_fields", {})
+    maintenance = state.get("maintenance_fields", {})
+
+    merged = {
+        "device_name": device_name,  # Ensure device_name is always present
+        **device_info,
+        **core,
+        **monitoring,
+        **fault,
+        **risk,
+        **maintenance,
+    }
+
+    # Ensure device_name is not overwritten by empty value from device_info
+    if not merged.get("device_name") or merged.get("device_name") == "":
+        merged["device_name"] = device_name
+
+    merged.pop("assessment_reasoning", None)
+
+    try:
+        validated = DiagnosisFields.from_llm_response(merged)
+        final_data = validated.model_dump()
+        console.print(f"[green]✓ 合并完成，共 {len(final_data)} 个字段[/green]")
+        return {"diagnosis_data": final_data}
+    except Exception as e:
+        logger.error(f"字段验证失败: {e}", exc_info=True)
+        return {"diagnosis_data": merged}
+
+
+async def report_node(state: DiagnosisState) -> dict:
+    diagnosis_data = state.get("diagnosis_data", {})
+
+    if not diagnosis_data:
+        return {"report_path": "诊断数据为空，无法生成报告"}
+
+    console.print("[dim][10/10] 生成 PDF 报告...[/dim]")
+
+    try:
         result = await generate_diagnosis_report_async(diagnosis_data)
 
         if not result.get("success"):
-            error_msg = result.get("error", "报告生成失败")
-            console.print(f"[red]✗ {error_msg}[/red]")
-            return {"report_path": error_msg}
+            return {"report_path": f"报告生成失败: {result.get('error', '未知错误')}"}
 
         report_path = result.get("output_path", "")
         console.print(f"[green]✓ 报告生成成功: {report_path}[/green]")
-
         return {"report_path": report_path}
 
     except Exception as e:
-        error_msg = f"报告生成失败: {e}"
-        console.print(f"[red]✗ {error_msg}[/red]")
         logger.error(f"报告生成失败: {e}", exc_info=True)
-        return {"report_path": error_msg}
-
-
-async def generate_diagnosis_report_async(data: dict[str, Any]) -> dict[str, Any]:
-    """异步生成诊断报告（在线程池中运行同步 MCP 调用）"""
-    try:
-        import concurrent.futures
-
-        from rag_agent.mcp.latex_client import generate_diagnosis_report as gen_report
-
-        loop = asyncio.get_running_loop()
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            result = await loop.run_in_executor(executor, lambda: gen_report(data, template_id="device_diagnosis"))
-            return result
-
-    except Exception as e:
-        logger.error(f"异步报告生成失败: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
-
-
-# 测试代码
-if __name__ == "__main__":
-    import asyncio
-
-    async def test_diagnosis_flow():
-        """测试诊断流程"""
-        console.print("[bold cyan]测试 Diagnosis Agent[/bold cyan]\n")
-
-        # 创建测试状态
-        state: DiagnosisState = {
-            "query": "变压器异常振动",
-            "device_name": "",
-            "documents": [],
-            "diagnosis_data": {},
-            "report_path": "",
-            "analysis_result": "",
-            "messages": [],
-        }
-
-        # 测试各个节点
-        console.print("[yellow]步骤 1: 检索节点[/yellow]")
-        result = await diagnosis_retrieval_node(state)
-        state.update(result)
-        console.print(f"文档数: {len(state['documents'])}\n")
-
-        if state["documents"]:
-            console.print("[yellow]步骤 2: 分析节点[/yellow]")
-            result = await diagnosis_analysis_node(state)
-            state.update(result)
-            console.print(f"分析结果长度: {len(state['analysis_result'])}\n")
-
-            console.print("[yellow]步骤 3: 字段生成节点[/yellow]")
-            result = await diagnosis_fields_node(state)
-            state.update(result)
-            console.print(f"字段数: {len(state['diagnosis_data'])}\n")
-
-            if state["diagnosis_data"]:
-                console.print("[yellow]步骤 4: 报告生成节点[/yellow]")
-                result = await diagnosis_report_node(state)
-                state.update(result)
-                console.print(f"报告路径: {state['report_path']}\n")
-
-        console.print("[bold green]✓ 测试完成[/bold green]")
-
-    # 运行测试
-    asyncio.run(test_diagnosis_flow())
+        return {"report_path": f"报告生成失败: {e}"}
