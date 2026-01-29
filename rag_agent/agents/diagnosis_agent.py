@@ -86,6 +86,56 @@ def _clean_control_chars(text: str) -> str:
     return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
 
 
+def _strip_markdown(text: str) -> str:
+    """Strip Markdown formatting from text for LaTeX compatibility.
+
+    Removes: **bold**, *italic*, `code`, # headers, - lists, [links](url)
+    """
+    if not isinstance(text, str):
+        return text
+
+    # Remove bold: **text** or __text__
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+
+    # Remove italic: *text* or _text_ (but not underscores in words)
+    text = re.sub(r"(?<!\w)\*([^*]+)\*(?!\w)", r"\1", text)
+    text = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"\1", text)
+
+    # Remove inline code: `code`
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+
+    # Remove headers: # Header, ## Header, etc.
+    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
+
+    # Remove list markers: - item, * item, + item, 1. item
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+
+    # Remove links: [text](url) -> text
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+
+    # Remove horizontal rules: --- or ***
+    text = re.sub(r"^[-*]{3,}\s*$", "", text, flags=re.MULTILINE)
+
+    return text
+
+
+def _strip_markdown_from_dict(data: dict) -> dict:
+    """Recursively strip Markdown from all string values in a dict."""
+    result = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            result[key] = _strip_markdown(value)
+        elif isinstance(value, dict):
+            result[key] = _strip_markdown_from_dict(value)
+        elif isinstance(value, list):
+            result[key] = [_strip_markdown(item) if isinstance(item, str) else item for item in value]
+        else:
+            result[key] = value
+    return result
+
+
 def _parse_json_response(response_text: str) -> dict[str, Any]:
     """Parse JSON from LLM response with multiple fallback strategies."""
     parser = get_json_parser()
@@ -468,7 +518,7 @@ async def merge_fields_node(state: DiagnosisState) -> dict:
     maintenance = state.get("maintenance_fields", {})
 
     merged = {
-        "device_name": device_name,  # Ensure device_name is always present
+        "device_name": device_name,
         **device_info,
         **core,
         **monitoring,
@@ -477,11 +527,12 @@ async def merge_fields_node(state: DiagnosisState) -> dict:
         **maintenance,
     }
 
-    # Ensure device_name is not overwritten by empty value from device_info
     if not merged.get("device_name") or merged.get("device_name") == "":
         merged["device_name"] = device_name
 
     merged.pop("assessment_reasoning", None)
+
+    merged = _strip_markdown_from_dict(merged)
 
     try:
         validated = DiagnosisFields.from_llm_response(merged)

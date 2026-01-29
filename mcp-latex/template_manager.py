@@ -5,12 +5,120 @@
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
 logger = logging.getLogger(__name__)
+
+
+LATEX_SPECIAL_CHARS = {
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+
+def _escape_latex(text: str) -> str:
+    """Escape LaTeX special characters."""
+    for char, escaped in LATEX_SPECIAL_CHARS.items():
+        text = text.replace(char, escaped)
+    text = text.replace("\\", r"\textbackslash{}")
+    return text
+
+
+def _convert_numbered_list(text: str) -> str:
+    """Convert numbered lists (1. 2. 3.) to LaTeX enumerate."""
+    lines = text.split("\n")
+    result = []
+    in_list = False
+    list_buffer = []
+
+    for line in lines:
+        stripped = line.strip()
+        match = re.match(r"^(\d+)[.、]\s*(.+)$", stripped)
+
+        if match:
+            if not in_list:
+                in_list = True
+                list_buffer = []
+            list_buffer.append(match.group(2))
+        else:
+            if in_list:
+                result.append(r"\begin{enumerate}")
+                for item in list_buffer:
+                    result.append(rf"  \item {item}")
+                result.append(r"\end{enumerate}")
+                in_list = False
+                list_buffer = []
+            result.append(line)
+
+    if in_list:
+        result.append(r"\begin{enumerate}")
+        for item in list_buffer:
+            result.append(rf"  \item {item}")
+        result.append(r"\end{enumerate}")
+
+    return "\n".join(result)
+
+
+def _convert_paragraphs(text: str) -> str:
+    """Convert double newlines to LaTeX paragraphs."""
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"\n\n+", "\n\n", text)
+    return text
+
+
+def text_to_latex(text: str) -> str:
+    """Convert plain text to LaTeX-formatted content."""
+    if not isinstance(text, str) or not text.strip():
+        return text
+
+    text = _escape_latex(text)
+    text = _convert_numbered_list(text)
+    text = _convert_paragraphs(text)
+
+    return text
+
+
+def convert_data_to_latex(data: dict[str, Any]) -> dict[str, Any]:
+    """Recursively convert all string values in dict to LaTeX format."""
+    skip_fields = {
+        "title",
+        "report_id",
+        "device_name",
+        "device_model",
+        "location",
+        "diagnosis_date",
+        "data_range",
+        "health_status",
+        "risk_level",
+    }
+
+    result = {}
+    for key, value in data.items():
+        if key in skip_fields:
+            if isinstance(value, str):
+                result[key] = _escape_latex(value)
+            else:
+                result[key] = value
+        elif isinstance(value, str):
+            result[key] = text_to_latex(value)
+        elif isinstance(value, dict):
+            result[key] = convert_data_to_latex(value)
+        elif isinstance(value, list):
+            result[key] = [text_to_latex(item) if isinstance(item, str) else item for item in value]
+        else:
+            result[key] = value
+    return result
 
 
 class TemplateManager:
@@ -149,7 +257,6 @@ class TemplateManager:
             logger.error(f"模板文件不存在: {template_path}")
             raise FileNotFoundError(f"模板不存在: {template_id}")
 
-        # 验证数据
         is_valid, errors = self.validate_data(template_id, data)
         if not is_valid:
             logger.error(f"数据验证失败: {errors}")
@@ -157,9 +264,10 @@ class TemplateManager:
 
         logger.debug("数据验证通过")
 
-        # 渲染模板
+        latex_data = convert_data_to_latex(data)
+
         template = self.jinja_env.get_template(f"{template_id}/template.tex")
-        latex_content = template.render(**data)
+        latex_content = template.render(**latex_data)
 
         logger.info(f"模板渲染成功: {template_id}, 填充 {len(data)} 个字段, 输出 {len(latex_content)} 字符")
 
